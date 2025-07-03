@@ -1,15 +1,16 @@
 import json
 import random
 from CodeClone import *
+from NewAugmentationNegatif import AugmentationNegatif
+from NewAugmentationpositif import *
 import re
 import os
 
 ################################ VARIABLE ############################
 
 DATASET_FOLDER = "samples_c/"
-NUMBER_OF_CLONE_POSITIF = 50
-NUMBER_OF_CLONE_NEGATIF = 100
-KEY_WORD = ["main", "test"]
+NUMBER_OF_CLONE_POSITIF = 25
+NUMBER_OF_CLONE_NEGATIF = 25
 
 ######################################################################
 
@@ -35,6 +36,7 @@ def extract_functions(file_path):
 
     return result
 
+"""
 print("Extraction des fonctions terminée")
 test = "#include \"array_max_min.h\"\
 \
@@ -62,6 +64,7 @@ void array_max_min(int tab[], size_t len, int *max, int *min)\
 "
 
 print(extract_functions("piscine/array_max_min/array_max_min.c")["array_max_min"])
+"""
 
 def get_c_files(folder):
     c_files = []
@@ -81,16 +84,9 @@ def create_dataset(folder):
     training_functions = []
 
     count = 0
-
-    t1 = transform1(window_size=10)
-    t2 = transform2()
-    t3 = tranform3()
-    t4 = transform4(prefix="my_")
-    t5 = transform5()
-    lt = [t1, t2, t3, t4, t5]
     count_fonction = 0
 
-    with open("dataset_splade.jsonl", "w") as f:
+    with open("dataset_splade_testt.jsonl", "w") as f:
         for filepath in c_files:
             functions = extract_functions(filepath)
             for function_name, jso in functions.items():
@@ -101,7 +97,7 @@ def create_dataset(folder):
                     for i in range(NUMBER_OF_CLONE_POSITIF):
                         try:
                             sample = samples(name=function_name, function=function)
-                            query_function = lt[i % len(lt)](sample).function
+                            query_function = AugmentCode(sample).function
                             f.write(json.dumps({
                                 "query": query_function,
                                 "document": function,
@@ -110,7 +106,7 @@ def create_dataset(folder):
                             }) + "\n")
                             count += 1
                         except Exception as e:
-                            print(f"Erreur à l'itération {i}: {e}")
+                            print(f"Erreur à l'ifhetération {i}: {e}")
 
 
                     for i in range(NUMBER_OF_CLONE_NEGATIF):
@@ -119,7 +115,10 @@ def create_dataset(folder):
                         try:
                             negative_sample_tmp = negative_samples[random.randint(0, len(negative_samples) - 1)]
                             negative_sample = samples(name=negative_sample_tmp.name, function=negative_sample_tmp.function)
-                            query_function = lt[i % len(lt)](negative_sample).function
+                            if (random.random() < 0.5):
+                                query_function = AugmentationNegatif(negative_sample).function
+                            else:
+                                query_function = negative_sample.function
 
                             f.write(json.dumps({
                                 "query": query_function,
@@ -137,3 +136,7 @@ def create_dataset(folder):
                     continue
                 count_fonction += 1
         print(str(count) + " triplet généré")
+
+if __name__ == "__main__":
+    create_dataset(DATASET_FOLDER)
+    print("Dataset created successfully.")
