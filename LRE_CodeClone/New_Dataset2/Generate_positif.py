@@ -99,8 +99,8 @@ print(f"Total fonctions chargées: {len(fonctions)}\n")
 
 # ======================= CHARGEMENT MODELE =======================
 print("Chargement du modèle...")
-model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
-#model_id = "deepseek-ai/deepseek-coder-1.3b-instruct"
+#model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
+model_id = "deepseek-ai/deepseek-coder-1.3b-instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
@@ -151,7 +151,7 @@ def generate_positive_sample(anchor_code):
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     tmp = extract_functions_from_c_file(generated_text)
     if tmp:
-        return tmp[0]["full_text"]
+        return tmp[1]["full_text"]
     else:
         return anchor_code
 
