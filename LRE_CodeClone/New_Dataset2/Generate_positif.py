@@ -149,16 +149,18 @@ def generate_positive_sample(anchor_code):
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print("=== Generated Function ===")
+    print(generated_text)
     tmp = extract_functions_from_c_file(generated_text)
     if tmp:
-        return tmp[1]["full_text"]
+        return tmp[0]["full_text"]
     else:
         return anchor_code
 
 # ======================= GENERATION PAR BATCH =======================
-batch_size = 4
+batch_size = 1
 duplicat = 1
-max_count = 16  # traiter toutes les fonctions
+max_count = 1  # traiter toutes les fonctions
 print("Génération des positifs...\n")
 
 buffer = []
