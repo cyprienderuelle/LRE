@@ -160,7 +160,7 @@ Refactored version (same behavior, different code):
         print("Aucune fonction extraite, retour à l'ancre.")
         return anchor_code
 
-# ======================= SAUVEGARDE =======================
+# ======================= SAUVEGARDE AVEC DEBUG =======================
 print("Génération des positifs...\n")
 
 duplicat = 1
@@ -176,17 +176,27 @@ with open(output_path, 'w') as f:
         anchor = func['full_text']
         func_type = func['type']
 
+        print(f"\n🟡 Fonction {count2}/{max_count} : {func['name']}")
+
         for i in range(duplicat):
             try:
+                print(f"  - Génération positive sample {i+1}/{duplicat}")
                 positive = generate_positive_sample(anchor)
+                print("    ✅ Fonction générée")
+
                 tmp = {
                     'type': func_type,
                     'positive': positive,
                     'anchor': anchor
                 }
-                f.write(json.dumps(tmp) + '\n')
+
+                json_line = json.dumps(tmp)
+                f.write(json_line + '\n')
+                f.flush()  # 🔥 FORCER l'écriture sur disque
+                print("    💾 Écrit dans le fichier")
+
             except Exception as e:
-                print(f"Erreur génération fonction {func['name']}: {e}")
+                print(f"❌ Erreur génération fonction {func['name']}: {e}")
                 continue
 
-print("\nTerminé !")
+print("\nTerminé ! 🎉")
