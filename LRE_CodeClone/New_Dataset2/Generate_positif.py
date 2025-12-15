@@ -100,11 +100,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    device_map={
-        0: "cuda:0",  # GTX 1080
-        1: "cuda:1",  # GTX 1080 Ti
-        2: "cuda:2"   # Quadro P6000
-    },
+    device_map="auto", 
     trust_remote_code=True,
 )
 model = torch.compile(model)
@@ -173,7 +169,7 @@ def worker(func):
         return None
 
 duplicat = 1
-max_count = 50  # nombre de fonctions à générer
+max_count = 10 # nombre de fonctions à générer
 results = []
 
 print("Génération des positifs...\n")
