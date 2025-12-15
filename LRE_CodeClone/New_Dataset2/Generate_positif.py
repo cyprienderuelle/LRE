@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 # ==================== CONFIGURATION GLOBALE ====================
 
 # MODÈLE POUR LA VITESSE : CodeLlama-3b
-MODEL_ID = "codellama/CodeLlama-3b-Instruct-hf" 
+MODEL_ID = "bigcode/starcoderbase-3b" 
 BASE_PATH = "./"
 DATASET_PATH = BASE_PATH + "List_functions.jsonl"
 OUTPUT_PATH = BASE_PATH + "List_functions_positif.jsonl"
@@ -20,7 +20,7 @@ OUTPUT_PATH = BASE_PATH + "List_functions_positif.jsonl"
 # Parallélisation
 MAX_WORKERS = 3 
 DUPLICAT = 1 
-MAX_FUNCTIONS_TO_PROCESS = 0 # Mis à 0 pour traiter tout le jeu de données
+MAX_FUNCTIONS_TO_PROCESS = 3 # Mis à 0 pour traiter tout le jeu de données
 
 # ==================== UTILITAIRE DE SAUVEGARDE INCÉMENTIELLE ====================
 
