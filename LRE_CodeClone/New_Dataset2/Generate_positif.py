@@ -132,7 +132,10 @@ def generate_positive_sample(anchor_code, gpu):
             eos_token_id=tokenizer.eos_token_id
         )
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print("Generated text on GPU")
+    print(generated_text)
     funcs = extract_functions_from_c_file(generated_text)
+    
     if funcs:
         try:
             return (funcs[1]["full_text"], True)
