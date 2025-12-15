@@ -139,7 +139,7 @@ def generate_positive_sample(anchor_code):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=1000,
+            max_new_tokens=len(anchor_code)*0.75,
             temperature=0.8,
             num_beams=1,
             do_sample=True,
