@@ -139,8 +139,9 @@ def generate_positive_sample(anchor_code):
         outputs = model.generate(
             **inputs,
             max_new_tokens=200,
+            temperature=0.8,
             num_beams=1,
-            do_sample=False,
+            do_sample=True,
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id
