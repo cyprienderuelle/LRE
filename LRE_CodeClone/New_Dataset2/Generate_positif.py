@@ -145,7 +145,7 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
         )
         
         # Le tokenizer CodeLlama nécessite trust_remote_code=False
-        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=False) 
+        tokenizer = AutoTokenizer.from_pretrained(model_id) 
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
             
@@ -206,14 +206,13 @@ def worker_generate_positive_sample(func_data, model_id, duplicat, gpu_device_in
         # ------------------ ESPACE DU PROMPT ------------------
         # VEUILLEZ REMPLACER LA LIGNE CI-DESSOUS PAR VOTRE PROMPT COMPLET
         # Utilisez {anchor_code} pour insérer la fonction C et {technique} pour le refactoring.
-        prompt = f"""Rewrite this C function keeping EXACTLY the same functionality.
-                    Apply: {technique}
+        prompt = prompt = f"""You are an expert C programmer. Rewrite the following C function in C language, keeping the EXACTLY SAME FUNCTION SIGNATURE and EXACTLY SAME SEMANTIC BEHAVIOR. Apply the refactoring technique: {technique}.
 
-                    Original:
-                    ```c
-                    {anchor_code}
-                    ```
-                    Rewritten version: """ 
+                <|begin_of_original_function|>
+                {anchor_code}
+                <|end_of_original_function|>
+
+                <|begin_of_rewritten_function|>"""
         
         # Exemple de ce que vous pourriez insérer :
         # prompt = f"""<|begin of instruction|>Rewrite the following C function: {anchor_code}. Apply {technique}. Give only the C code in the response.<|end of instruction|>"""
