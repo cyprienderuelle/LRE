@@ -161,9 +161,9 @@ def generate_positive_sample(anchor_code):
         return (anchor_code, False)
 
 # ======================= GENERATION PAR BATCH =======================
-batch_size = 64
+batch_size = 4
 duplicat = 1
-max_count = 2048*2*2*2*2  # traiter toutes les fonctions
+max_count = 16 # traiter toutes les fonctions
 print("Génération des positifs...\n")
 
 buffer = []
