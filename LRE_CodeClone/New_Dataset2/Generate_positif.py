@@ -127,7 +127,7 @@ def generate_positive_sample(anchor_code):
         "Add intermediate variables"
     ]
     technique = random.choice(techniques)
-    prompt = f"""You are an expert C programmer. Rewrite the following C function in C language, keeping the EXACTLY SAME FUNCTION SIGNATURE and EXACTLY SAME SEMANTIC BEHAVIOR. Apply the refactoring technique: {technique}.
+    prompt = f"""You are an expert C programmer. Rewrite the following C function in C language, keeping the EXACTLY SAME FUNCTION SIGNATURE and EXACTLY SAME SEMANTIC BEHAVIOR. Generate the REWRITTEN C function ONLY. Apply the refactoring technique: {technique}.
 
                     <|begin_of_original_function|>
                     {anchor_code}
@@ -151,8 +151,6 @@ def generate_positive_sample(anchor_code):
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print("=== Generated Function ===")
-    print(generated_text)
     tmp = extract_functions_from_c_file(generated_text)
     if tmp:
         try:
@@ -163,9 +161,9 @@ def generate_positive_sample(anchor_code):
         return (anchor_code, False)
 
 # ======================= GENERATION PAR BATCH =======================
-batch_size = 32
+batch_size = 64
 duplicat = 1
-max_count = 32  # traiter toutes les fonctions
+max_count = 2048*2*2*2*2  # traiter toutes les fonctions
 print("Génération des positifs...\n")
 
 buffer = []
