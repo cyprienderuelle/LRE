@@ -100,7 +100,7 @@ print(f"Total fonctions chargées: {len(fonctions)}\n")
 # ======================= CHARGEMENT MODELE =======================
 print("Chargement du modèle...")
 #model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
-model_id = "Qwen2.5-Coder-7B-Instruct"
+model_id = "Qwen/Qwen2.5-Coder-7B-Instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
