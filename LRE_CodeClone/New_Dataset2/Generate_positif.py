@@ -98,25 +98,28 @@ _MODEL_CACHE = {}
 _TOKENIZER_CACHE = {}
 
 def get_model_and_tokenizer(model_id, gpu_device_index):
-    """Charge le modèle/tokenizer une seule fois par processus/GPU."""
+    """Charge le modèle/tokenizer une seule fois par processus/GPU en 4-bit."""
     
-    # Clé de cache basée sur l'index du GPU
     cache_key = f"{model_id}_{gpu_device_index}"
-    
     if cache_key in _MODEL_CACHE and cache_key in _TOKENIZER_CACHE:
         return _TOKENIZER_CACHE[cache_key], _MODEL_CACHE[cache_key]
 
-    # --- Initialisation du contexte GPU pour le processus ---
     if gpu_device_index is not None:
-         # Affecter explicitement l'appareil pour ce processus
          os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_device_index)
-         # target_device n'est plus utilisé pour le déplacement du modèle
-         # target_device = torch.device(f"cuda:0") # Ancien code
     
-    print(f"[Worker {os.getpid()}] Chargement du modèle sur CUDA_VISIBLE_DEVICES={gpu_device_index}")
+    print(f"[Worker {os.getpid()}] Chargement du modèle sur CUDA_VISIBLE_DEVICES={gpu_device_index} en 4-bit...")
 
     try:
-        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+        
+        # ------------------ Configuration de la Quantization ------------------
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4", # Optimisé pour l'inférence
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16 # Type de calcul pour la performance
+        )
+        # ----------------------------------------------------------------------
         
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         if tokenizer.pad_token is None:
@@ -124,16 +127,14 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
             
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.float16,
+            # Supprimer torch_dtype=torch.float16 car c'est géré par bnb_4bit_compute_dtype
             device_map="auto", 
             trust_remote_code=True,
-            low_cpu_mem_usage=True 
+            low_cpu_mem_usage=True,
+            # AJOUT DES ARGUMENTS DE QUANTIFICATION
+            quantization_config=quantization_config
         )
         
-        # LIGNE CRÉANT LE CONFLIT: SUPPRIMÉE
-        # model.to(target_device) # <-- C'est cette ligne qui causait l'erreur
-        
-        # Mise en cache
         _TOKENIZER_CACHE[cache_key] = tokenizer
         _MODEL_CACHE[cache_key] = model
         
