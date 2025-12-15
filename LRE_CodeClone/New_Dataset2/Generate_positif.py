@@ -3,8 +3,11 @@ import torch
 import json
 import random
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# ======================= EXTRACTION DES FONCTIONS =======================
 def extract_functions_from_c_file(code: str):
+    """Extraire les fonctions C (signature + corps), en ignorant les chaînes et caractères"""
     functions = []
     length = len(code)
     i = 0
@@ -23,9 +26,9 @@ def extract_functions_from_c_file(code: str):
         start = i + m.start()
         j = i + m.end()
         paren_count = 1
+        in_string = in_char = escape = False
 
-        in_string = in_char = False
-        escape = False
+        # Fin signature
         while j < length and paren_count > 0:
             c = code[j]
             if c == '"' and not escape and not in_char:
@@ -47,11 +50,10 @@ def extract_functions_from_c_file(code: str):
             i = j
             continue
 
+        # Compter accolades
         brace_count = 1
-        body_start = j
         j += 1
-        in_string = in_char = False
-        escape = False
+        in_string = in_char = escape = False
 
         while j < length and brace_count > 0:
             c = code[j]
@@ -68,12 +70,7 @@ def extract_functions_from_c_file(code: str):
             j += 1
 
         full_text = code[start:j]
-        functions.append({
-            'name': name,
-            'return_type': ret_type.strip(),
-            'full_text': full_text
-        })
-
+        functions.append({'name': name, 'return_type': ret_type.strip(), 'full_text': full_text})
         i = j
 
     return functions
@@ -89,31 +86,33 @@ count = 0
 with open(dataset_path, "r") as f:
     for line in f:
         func = json.loads(line)
-        func_type = count
+        fonctions.append({'name': func['name'], 'type': count, 'full_text': func['full_text']})
         count += 1
-        fonctions.append({
-            'name': func['name'],
-            'type': func_type,
-            'full_text': func['full_text']
-        })
 
-print("\nChargement du modèle...")
+print(f"Total fonctions chargées: {len(fonctions)}\n")
+
+# ======================= CHARGEMENT DU MODELE =======================
+print("Chargement du modèle...")
+
 model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    device_map="auto",
+    device_map={
+        0: "cuda:0",  # GTX 1080
+        1: "cuda:1",  # GTX 1080 Ti
+        2: "cuda:2"   # Quadro P6000
+    },
     trust_remote_code=True,
 )
-
 model = torch.compile(model)
 
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-print("Modèle chargé\n")
+print("Modèle chargé sur multi-GPU.\n")
 
 # ======================= GÉNÉRATION =======================
 def generate_positive_sample(anchor_code):
@@ -125,8 +124,8 @@ def generate_positive_sample(anchor_code):
         "Use different pointer/array notation",
         "Add intermediate variables"
     ]
-
     technique = random.choice(techniques)
+
     prompt = f"""Rewrite this C function keeping EXACTLY the same functionality.
 Apply: {technique}
 Original:
@@ -149,54 +148,50 @@ Refactored version (same behavior, different code):
             num_beams=1,
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     tmp = extract_functions_from_c_file(generated_text)
-    if len(tmp) > 0:
+    if tmp:
         return tmp[0]["full_text"]
     else:
-        print("Aucune fonction extraite, retour à l'ancre.")
+        print("⚠ Aucune fonction extraite, retour à l'ancre.")
         return anchor_code
 
-# ======================= SAUVEGARDE AVEC DEBUG =======================
-print("Génération des positifs...\n")
+# ======================= MULTI-THREAD & SAUVEGARDE =======================
+from functools import partial
+
+def worker(func):
+    anchor = func['full_text']
+    func_type = func['type']
+    try:
+        positive = generate_positive_sample(anchor)
+        return {'type': func_type, 'anchor': anchor, 'positive': positive}
+    except Exception as e:
+        print(f"Erreur génération fonction {func['name']}: {e}")
+        return None
 
 duplicat = 1
-max_count = 10
-count2 = 0
+max_count = 50  # nombre de fonctions à générer
+results = []
 
+print("Génération des positifs...\n")
+
+with ThreadPoolExecutor(max_workers=3) as executor:
+    futures = [executor.submit(worker, func) for func in fonctions[:max_count]]
+    for fut in as_completed(futures):
+        res = fut.result()
+        if res:
+            results.append(res)
+            print(f"✅ Fonction générée: type {res['type']}")
+        else:
+            print("❌ Échec génération d'une fonction.")
+
+# Sauvegarde finale
 with open(output_path, 'w') as f:
-    for func in fonctions:
-        if count2 >= max_count:
-            break
-        count2 += 1
+    for r in results:
+        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        f.flush()
 
-        anchor = func['full_text']
-        func_type = func['type']
-
-        print(f"\n🟡 Fonction {count2}/{max_count} : {func['name']}")
-
-        for i in range(duplicat):
-            try:
-                print(f"  - Génération positive sample {i+1}/{duplicat}")
-                positive = generate_positive_sample(anchor)
-                print("    ✅ Fonction générée")
-
-                tmp = {
-                    'type': func_type,
-                    'positive': positive,
-                    'anchor': anchor
-                }
-
-                json_line = json.dumps(tmp)
-                f.write(json_line + '\n')
-                f.flush()  # 🔥 FORCER l'écriture sur disque
-                print("    💾 Écrit dans le fichier")
-
-            except Exception as e:
-                print(f"❌ Erreur génération fonction {func['name']}: {e}")
-                continue
-
-print("\nTerminé ! 🎉")
+print("\nTerminé ! Toutes les fonctions générées sont sauvegardées dans", output_path)
