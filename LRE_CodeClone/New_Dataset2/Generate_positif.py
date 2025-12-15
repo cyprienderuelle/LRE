@@ -100,7 +100,7 @@ print(f"Total fonctions chargées: {len(fonctions)}\n")
 # ======================= CHARGEMENT MODELE =======================
 print("Chargement du modèle...")
 #model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
-model_id = "Qwen/Qwen2.5-Coder-7B-Instruct"
+model_id = "Qwen/Qwen2.5-Coder-3B-Instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
@@ -139,7 +139,7 @@ def generate_positive_sample(anchor_code):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=200,
+            max_new_tokens=1000,
             temperature=0.8,
             num_beams=1,
             do_sample=True,
