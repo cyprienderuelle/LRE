@@ -97,6 +97,10 @@ gpus = [i for i in range(torch.cuda.device_count())]
 gpu_cycle = cycle(gpus)
 
 def generate_positive_sample(anchor_code, gpu):
+
+    if len(anchor_code) > 1250:
+        return (anchor_code, False)
+    
     device = f"cuda:{gpu}"
     techniques = [
         "Rename variables with different names",
@@ -131,10 +135,10 @@ def generate_positive_sample(anchor_code, gpu):
     funcs = extract_functions_from_c_file(generated_text)
     if funcs:
         try:
-            return funcs[1]["full_text"]
+            return (funcs[1]["full_text"], True)
         except IndexError:
-            return funcs[0]["full_text"]
-    return anchor_code
+            return (funcs[0]["full_text"], False)
+    return (anchor_code, False)
 
 # ======================= MULTI-THREAD / MULTI-GPU =======================
 batch_size = 32
@@ -143,7 +147,7 @@ flush_size = 32
 buffer = []
 
 print("Génération des positifs...\n")
-with open(output_path, 'w') as f, ThreadPoolExecutor(max_workers=len(gpus)*2) as executor:
+with open(output_path, 'w') as f, ThreadPoolExecutor(max_workers=len(gpus)*4) as executor:
     futures = []
     for i in range(0, len(fonctions), batch_size):
         batch = fonctions[i:i+batch_size]
@@ -153,8 +157,13 @@ with open(output_path, 'w') as f, ThreadPoolExecutor(max_workers=len(gpus)*2) as
                 futures.append(executor.submit(generate_positive_sample, func['full_text'], gpu))
         for future, func in zip(as_completed(futures), batch*duplicat):
             try:
-                positive = future.result()
-                buffer.append(json.dumps({'type': func['type'], 'anchor': func['full_text'], 'positive': positive}))
+                positive, success = future.result()
+                buffer.append(json.dumps({
+                    'type': func['type'],
+                    'anchor': func['full_text'],
+                    'positive': positive,
+                    'success': success
+                }))
                 if len(buffer) >= flush_size:
                     f.write("\n".join(buffer) + "\n")
                     buffer = []
