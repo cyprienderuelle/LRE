@@ -107,19 +107,17 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
         return _TOKENIZER_CACHE[cache_key], _MODEL_CACHE[cache_key]
 
     # --- Initialisation du contexte GPU pour le processus ---
-    # Ceci est crucial dans les ProcessPoolExecutor
     if gpu_device_index is not None:
          # Affecter explicitement l'appareil pour ce processus
-         # CUDA_VISIBLE_DEVICES doit être un index 'visible', pas un index global.
-         # Comme nous n'en avons qu'un par processus, on utilise 0 ou l'index réel.
          os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_device_index)
-         target_device = torch.device(f"cuda:0") # Target device est toujours :0 vue par ce processus
-    else:
-         target_device = torch.device("cpu") # Fallback CPU
-         
+         # target_device n'est plus utilisé pour le déplacement du modèle
+         # target_device = torch.device(f"cuda:0") # Ancien code
+    
     print(f"[Worker {os.getpid()}] Chargement du modèle sur CUDA_VISIBLE_DEVICES={gpu_device_index}")
 
     try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -127,17 +125,14 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             torch_dtype=torch.float16,
-            # Le 'auto' va utiliser le GPU disponible (celui spécifié par CUDA_VISIBLE_DEVICES)
             device_map="auto", 
             trust_remote_code=True,
-            # Ajouter low_cpu_mem_usage peut aider
             low_cpu_mem_usage=True 
         )
         
-        # S'assurer que le modèle est sur le bon appareil (le premier/seul disponible)
-        # Bien que device_map="auto" fasse le travail, cela sécurise
-        model.to(target_device) 
-
+        # LIGNE CRÉANT LE CONFLIT: SUPPRIMÉE
+        # model.to(target_device) # <-- C'est cette ligne qui causait l'erreur
+        
         # Mise en cache
         _TOKENIZER_CACHE[cache_key] = tokenizer
         _MODEL_CACHE[cache_key] = model
@@ -146,10 +141,8 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
         
     except Exception as e:
         print(f"[Worker {os.getpid()}] Erreur FATALE de chargement du modèle sur GPU {gpu_device_index}: {e}")
-        # Vider la cache en cas d'échec
         if cache_key in _MODEL_CACHE: del _MODEL_CACHE[cache_key]
         if cache_key in _TOKENIZER_CACHE: del _TOKENIZER_CACHE[cache_key]
-        # Re-lancer l'exception pour marquer l'échec de la tâche
         raise
 
 def worker_generate_positive_sample(func_data, model_id, duplicat, gpu_device_index=None):
