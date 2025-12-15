@@ -3,11 +3,11 @@ import torch
 import json
 import random
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
-# ======================= EXTRACTION DES FONCTIONS =======================
+# ======================= FONCTION EXTRACTION =======================
 def extract_functions_from_c_file(code: str):
-    """Extraire les fonctions C (signature + corps), en ignorant les chaînes et caractères"""
     functions = []
     length = len(code)
     i = 0
@@ -28,7 +28,6 @@ def extract_functions_from_c_file(code: str):
         paren_count = 1
         in_string = in_char = escape = False
 
-        # Fin signature
         while j < length and paren_count > 0:
             c = code[j]
             if c == '"' and not escape and not in_char:
@@ -50,7 +49,6 @@ def extract_functions_from_c_file(code: str):
             i = j
             continue
 
-        # Compter accolades
         brace_count = 1
         j += 1
         in_string = in_char = escape = False
@@ -70,9 +68,12 @@ def extract_functions_from_c_file(code: str):
             j += 1
 
         full_text = code[start:j]
-        functions.append({'name': name, 'return_type': ret_type.strip(), 'full_text': full_text})
+        functions.append({
+            'name': name,
+            'return_type': ret_type.strip(),
+            'full_text': full_text
+        })
         i = j
-
     return functions
 
 # ======================= PATHS =======================
@@ -80,39 +81,41 @@ base_path = "./"
 dataset_path = base_path + "List_functions.jsonl"
 output_path = base_path + "List_functions_positif.jsonl"
 
-# ======================= CHARGEMENT =======================
+# ======================= CHARGEMENT DATASET =======================
 fonctions = []
 count = 0
+print("Chargement des fonctions...")
 with open(dataset_path, "r") as f:
     for line in f:
         func = json.loads(line)
-        fonctions.append({'name': func['name'], 'type': count, 'full_text': func['full_text']})
+        func_type = count
         count += 1
-
+        fonctions.append({
+            'name': func['name'],
+            'type': func_type,
+            'full_text': func['full_text']
+        })
 print(f"Total fonctions chargées: {len(fonctions)}\n")
 
-# ======================= CHARGEMENT DU MODELE =======================
+# ======================= CHARGEMENT MODELE =======================
 print("Chargement du modèle...")
-
 model_id = "deepseek-ai/deepseek-coder-6.7b-instruct"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.float16,
-    device_map="auto", 
-    trust_remote_code=True,
+    dtype=torch.float16,
+    device_map="auto",
+    trust_remote_code=True
 )
 model = torch.compile(model)
-
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 print("Modèle chargé sur multi-GPU.\n")
 
-# ======================= GÉNÉRATION =======================
+# ======================= GENERATION =======================
 def generate_positive_sample(anchor_code):
-    """Génère une version refactorisée (positive) de la fonction"""
     techniques = [
         "Rename variables with different names",
         "Change loop structure (for/while)",
@@ -121,7 +124,6 @@ def generate_positive_sample(anchor_code):
         "Add intermediate variables"
     ]
     technique = random.choice(techniques)
-
     prompt = f"""Rewrite this C function keeping EXACTLY the same functionality.
 Apply: {technique}
 Original:
@@ -133,15 +135,12 @@ Refactored version (same behavior, different code):
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
-    with torch.no_grad():
+    with torch.inference_mode():
         outputs = model.generate(
             **inputs,
             max_new_tokens=200,
-            temperature=0.7,
-            top_k=50,
-            top_p=0.95,
-            do_sample=False,
             num_beams=1,
+            do_sample=False,
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id
@@ -152,42 +151,37 @@ Refactored version (same behavior, different code):
     if tmp:
         return tmp[0]["full_text"]
     else:
-        print("⚠ Aucune fonction extraite, retour à l'ancre.")
         return anchor_code
 
-# ======================= MULTI-THREAD & SAUVEGARDE =======================
-from functools import partial
-
-def worker(func):
-    anchor = func['full_text']
-    func_type = func['type']
-    try:
-        positive = generate_positive_sample(anchor)
-        return {'type': func_type, 'anchor': anchor, 'positive': positive}
-    except Exception as e:
-        print(f"Erreur génération fonction {func['name']}: {e}")
-        return None
-
+# ======================= GENERATION PAR BATCH =======================
+batch_size = 16
 duplicat = 1
-max_count = 10 # nombre de fonctions à générer
-results = []
-
+max_count = 64  # traiter toutes les fonctions
 print("Génération des positifs...\n")
 
-with ThreadPoolExecutor(max_workers=3) as executor:
-    futures = [executor.submit(worker, func) for func in fonctions[:max_count]]
-    for fut in as_completed(futures):
-        res = fut.result()
-        if res:
-            results.append(res)
-            print(f"✅ Fonction générée: type {res['type']}")
-        else:
-            print("❌ Échec génération d'une fonction.")
+buffer = []
+flush_size = 32  # écrire tous les 32 résultats
 
-# Sauvegarde finale
 with open(output_path, 'w') as f:
-    for r in results:
-        f.write(json.dumps(r, ensure_ascii=False) + "\n")
-        f.flush()
+    for i in tqdm(range(0, min(len(fonctions), max_count), batch_size)):
+        batch = fonctions[i:i+batch_size]
+        for func in batch:
+            for _ in range(duplicat):
+                try:
+                    positive = generate_positive_sample(func['full_text'])
+                    tmp = {
+                        'type': func['type'],
+                        'positive': positive,
+                        'anchor': func['full_text']
+                    }
+                    buffer.append(json.dumps(tmp))
+                    if len(buffer) >= flush_size:
+                        f.write("\n".join(buffer) + "\n")
+                        buffer = []
+                except Exception as e:
+                    print(f"Erreur génération fonction {func['name']}: {e}")
+    # flush final
+    if buffer:
+        f.write("\n".join(buffer) + "\n")
 
-print("\nTerminé ! Toutes les fonctions générées sont sauvegardées dans", output_path)
+print("\nTerminé !")
