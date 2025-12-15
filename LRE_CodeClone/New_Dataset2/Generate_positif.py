@@ -5,7 +5,10 @@ import random
 import concurrent.futures
 import os
 import threading
-from transformers import AutoTokenizer, AutoModelForCausalLM
+import time
+# Importations des librairies de Hugging Face et BitsAndBytes
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig 
+
 
 # ==================== CONFIGURATION GLOBALE ====================
 
@@ -16,19 +19,36 @@ DATASET_PATH = BASE_PATH + "List_functions.jsonl"
 OUTPUT_PATH = BASE_PATH + "List_functions_positif.jsonl"
 
 # Parallélisation
-# NOTE: Le modèle deepseek-coder-6.7b-instruct est grand.
-# L'utilisation de ProcessPoolExecutor est CORRECTE pour forcer le chargement
-# du modèle sur différents GPU/VRAM, mais il faut s'assurer que l'environnement
-# est propre. MAX_WORKERS = nombre de GPU.
 MAX_WORKERS = 3 
-DUPLICAT = 1 # Nombre d'échantillons positifs à générer par fonction ancre
-MAX_FUNCTIONS_TO_PROCESS = 10 # Limite pour le test rapide
+DUPLICAT = 1 
+MAX_FUNCTIONS_TO_PROCESS = 0 # Mis à 0 pour traiter tout le jeu de données
+
+# ==================== UTILITAIRE DE SAUVEGARDE INCÉMENTIELLE ====================
+
+# Verrou pour s'assurer que l'écriture dans le fichier est atomique (thread/process-safe)
+FILE_LOCK = threading.Lock() 
+
+def save_incremental(results_list):
+    """Sauvegarde les résultats d'une seule tâche dans le fichier de sortie."""
+    if not results_list:
+        return
+        
+    with FILE_LOCK:
+        try:
+            # Utiliser 'a' pour ajouter au fichier existant
+            with open(OUTPUT_PATH, 'a') as f: 
+                for item in results_list:
+                    # Assurez-vous que l'élément est un dictionnaire
+                    if isinstance(item, dict):
+                        f.write(json.dumps(item) + '\n')
+        except Exception as e:
+            print(f"Erreur d'écriture incrémentielle : {e}")
 
 # ==================== FONCTIONS D'EXTRACTION ====================
 
 def extract_functions_from_c_file(code: str):
     """
-    Extraire les fonctions C en conservant signature + accolades. (Logique conservée)
+    Extraire les fonctions C en conservant signature + accolades.
     """
     functions = []
     length = len(code)
@@ -90,10 +110,10 @@ def extract_functions_from_c_file(code: str):
         i = j
     return functions
 
+
 # ==================== FONCTION DE TRAVAIL (Worker) ====================
 
 # Global pour stocker les modèles déjà chargés par le processus pour éviter la relecture
-# REMARQUE : Dans ProcessPoolExecutor, chaque processus a sa propre copie de ces globales.
 _MODEL_CACHE = {} 
 _TOKENIZER_CACHE = {}
 
@@ -107,7 +127,10 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
     if gpu_device_index is not None:
          os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_device_index)
     
-    print(f"[Worker {os.getpid()}] Chargement du modèle sur CUDA_VISIBLE_DEVICES={gpu_device_index} en 4-bit...")
+    # Déterminer le dtype de calcul optimal (bf16 pour la performance si supporté)
+    compute_dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+    
+    print(f"[Worker {os.getpid()}] Chargement du modèle sur CUDA_VISIBLE_DEVICES={gpu_device_index} en 4-bit (compute_dtype={compute_dtype})...")
 
     try:
         from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
@@ -117,7 +140,7 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4", # Optimisé pour l'inférence
             bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=torch.float16 # Type de calcul pour la performance
+            bnb_4bit_compute_dtype=compute_dtype 
         )
         # ----------------------------------------------------------------------
         
@@ -127,13 +150,22 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
             
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            # Supprimer torch_dtype=torch.float16 car c'est géré par bnb_4bit_compute_dtype
             device_map="auto", 
             trust_remote_code=True,
             low_cpu_mem_usage=True,
-            # AJOUT DES ARGUMENTS DE QUANTIFICATION
             quantization_config=quantization_config
         )
+        
+        # ------------------ Ajout de Torch Compile pour la Vitesse ------------------
+        try:
+            model.eval() 
+            # Utilisation de 'max-autotune' pour chercher l'optimisation maximale
+            model = torch.compile(model, mode="max-autotune")
+            print(f"[Worker {os.getpid()}] Modèle compilé avec torch.compile (max-autotune).")
+        except Exception as compile_error:
+            print(f"[Worker {os.getpid()}] Avertissement: torch.compile a échoué: {compile_error}")
+        # ---------------------------------------------------------------------------
+
         
         _TOKENIZER_CACHE[cache_key] = tokenizer
         _MODEL_CACHE[cache_key] = model
@@ -144,6 +176,7 @@ def get_model_and_tokenizer(model_id, gpu_device_index):
         print(f"[Worker {os.getpid()}] Erreur FATALE de chargement du modèle sur GPU {gpu_device_index}: {e}")
         if cache_key in _MODEL_CACHE: del _MODEL_CACHE[cache_key]
         if cache_key in _TOKENIZER_CACHE: del _TOKENIZER_CACHE[cache_key]
+        # Re-lever l'exception pour terminer la tâche parente et ne pas boucler indéfiniment
         raise
 
 def worker_generate_positive_sample(func_data, model_id, duplicat, gpu_device_index=None):
@@ -155,7 +188,7 @@ def worker_generate_positive_sample(func_data, model_id, duplicat, gpu_device_in
     try:
         tokenizer, model = get_model_and_tokenizer(model_id, gpu_device_index)
     except Exception:
-        # L'erreur a déjà été loguée dans get_model_and_tokenizer
+        # Si le modèle ne charge pas (erreur loguée dans get_model_and_tokenizer), on retourne vide
         return []
 
     # Le device est déterminé par le modèle après le chargement (device_map="auto")
@@ -180,11 +213,9 @@ Apply: {technique}
 Original:
 ```c
 {anchor_code}
-```
-Rewritten version:
-"""
-        # Utiliser `torch.no_grad()` pour l'inférence
-        with torch.no_grad():
+Rewritten version: """ 
+        with torch.no_grad(): 
+            
             inputs = tokenizer_instance(prompt, return_tensors="pt", truncation=True, max_length=1024)
             inputs = {k: v.to(device_instance) for k, v in inputs.items()}
 
@@ -202,15 +233,25 @@ Rewritten version:
 
         generated_text = tokenizer_instance.decode(output_tokens[0], skip_special_tokens=True)
 
-        # Extraction et nettoyage du code généré (logique conservée)
+        # Extraction et nettoyage du code généré 
         try:
-            tmp = extract_functions_from_c_file(generated_text)
-            if len(tmp) > 1:
-                generated_text = tmp[1]["full_text"]
-            elif len(tmp) == 1:
-                generated_text = tmp[0]["full_text"]
-            else:
-                pass 
+            # Le prompt est souvent répété, nous cherchons le code généré après le second ```c
+            
+            # Recherche de la fin du code généré
+            code_match = re.search(r"```c\n(.*?)\n```", generated_text, re.DOTALL)
+            if code_match:
+                generated_text = code_match.group(1).strip()
+            
+            # Si le modèle ne met pas de balises, utiliser la logique d'extraction de fonction C
+            if not code_match:
+                tmp = extract_functions_from_c_file(generated_text)
+                if len(tmp) > 1:
+                    # Si plusieurs fonctions sont extraites, prendre la première après l'originale si l'originale est présente
+                    generated_text = tmp[1]["full_text"]
+                elif len(tmp) == 1:
+                    generated_text = tmp[0]["full_text"]
+                else:
+                    pass # Garder le texte tel quel pour vérification si l'extraction échoue
         except Exception:
             pass
 
@@ -221,15 +262,15 @@ Rewritten version:
     anchor = func_data['full_text']
     func_type = func_data['type']
     func_name = func_data.get('name', 'Inconnue')
-    
+
     for _ in range(duplicat):
         try:
             positive = generate_single_sample(anchor, tokenizer, model, device)
 
-            # Vérification basique de validité
-            if 'error' in positive.lower() or not positive.strip().endswith('}'):
+            # Vérification basique de validité: si le résultat est vide ou semble invalide
+            if not positive.strip() or 'error' in positive.lower() or not positive.strip().endswith('}'):
                 # print(f"Réessayez ou utilisez l'ancre pour {func_name}")
-                positive = anchor 
+                positive = anchor # Utiliser l'ancre si le résultat est mauvais
 
             results.append({
                 'type': func_type,
@@ -244,40 +285,31 @@ Rewritten version:
 
     return results
 
-# ==================== CHARGEMENT DES DONNÉES (Main) ====================
-
-def load_functions(dataset_path):
-    # Logique de chargement conservée
+def load_functions(dataset_path): # Logique de chargement conservée 
     fonctions = []
-    count = 0
-    print("Lecture des fonctions depuis le fichier JSONL...")
-    try:
-        with open(dataset_path, "r") as f:
-            for line in f:
-                func = json.loads(line)
-                fonctions.append({
-                    'name': func['name'],
-                    'type': count, 
-                    'full_text': func['full_text']
-                })
-                count += 1
-    except FileNotFoundError:
-        print(f"Erreur: Le fichier {dataset_path} n'a pas été trouvé.")
+    count = 0 
+    print("Lecture des fonctions depuis le fichier JSONL...") 
+    try: 
+        with open(dataset_path, "r") as f: 
+            for line in f: 
+                func = json.loads(line) 
+                fonctions.append({ 'name': func.get('name', f'Func_{count}'), 'type': count, 'full_text': func['full_text'] }) 
+                count += 1 
+    except FileNotFoundError: 
+        print(f"Erreur: Le fichier {dataset_path} n'a pas été trouvé.") 
         return []
 
     print(f"{len(fonctions)} fonctions lues.")
     return fonctions
 
-# ==================== EXÉCUTION PRINCIPALE ====================
 
 if __name__ == '__main__':
-    
+
     # Fixer les problèmes potentiels de fork/multiprocessing
-    # On utilise "spawn" pour s'assurer que chaque processus enfant a un environnement propre
     torch.multiprocessing.set_start_method('spawn', force=True) 
-    
+
     print(f"Démarrage du processus de génération en parallèle (Max {MAX_WORKERS} workers/GPU)...")
-    
+
     # 1. Chargement des données
     fonctions = load_functions(DATASET_PATH)
 
@@ -290,14 +322,21 @@ if __name__ == '__main__':
         print(f"Limite appliquée: Traitement des {MAX_FUNCTIONS_TO_PROCESS} premières fonctions.")
     else:
         fonctions_to_process = fonctions
+        print(f"Traitement de {len(fonctions_to_process)} fonctions.")
 
 
-    all_results = []
-    
-    # 2. Exécution en parallèle
-    gpu_indices = [0, 1, 2] # Les index physiques de vos cartes (GTX 1080, 1080 Ti, P6000)
-    
-    # Utilisation d'un ProcessPoolExecutor pour le parallélisme CPU/GPU
+    processed_count = 0 
+    total_samples = len(fonctions_to_process) * DUPLICAT
+
+    # 2. Préparation du fichier de sortie
+    if os.path.exists(OUTPUT_PATH):
+        # Pour une exécution complète, il faut effacer l'ancien fichier
+        os.remove(OUTPUT_PATH)
+        print(f"Ancien fichier de résultats ({OUTPUT_PATH}) supprimé. Redémarrage propre.")
+
+    # 3. Exécution en parallèle
+    gpu_indices = [0, 1, 2] # Les index physiques de vos cartes
+
     with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         
         futures = []
@@ -311,28 +350,33 @@ if __name__ == '__main__':
                 func, 
                 MODEL_ID, 
                 DUPLICAT,
-                gpu_idx # L'index GPU est passé comme argument
+                gpu_idx 
             )
             futures.append(future)
             
         print(f"{len(futures)} tâches de génération soumises à {MAX_WORKERS} workers...")
 
-        # 3. Récupération des résultats
+        # 4. Récupération des résultats et Sauvegarde Incrémentielle
         for i, future in enumerate(concurrent.futures.as_completed(futures)):
             try:
                 results = future.result()
-                all_results.extend(results)
                 
-                print(f"-> Tâche {i+1}/{len(futures)} terminée. Résultats générés: {len(results)}. Total cumulé: {len(all_results)}")
+                # SAUVEGARDE INCÉMENTIELLE IMMÉDIATE
+                save_incremental(results)
+                
+                processed_count += DUPLICAT
+                
+                print(f"-> Tâche {i+1}/{len(futures)} terminée. Samples générés: {len(results)}. Total cumulé: {processed_count}/{total_samples}")
                 
             except Exception as e:
                 print(f"Une tâche (Worker) a échoué pendant l'exécution: {e}")
 
-    # 4. Sauvegarde finale
-    print("\nÉcriture des résultats dans le fichier de sortie...")
-    with open(OUTPUT_PATH, 'w') as f:
-        for item in all_results:
-            f.write(json.dumps(item) + '\n')
+    # 5. Fin
+    print(f"\n✅ Génération terminée.")
 
-    print(f"\n✅ Génération terminée et sauvée dans {OUTPUT_PATH}")
-    print(f"Total des échantillons (Anchor/Positive) : {len(all_results)}.")
+    # Vérification finale du nombre de lignes dans le fichier
+    try:
+        final_count = sum(1 for line in open(OUTPUT_PATH))
+        print(f"Total des échantillons sauvés dans {OUTPUT_PATH} : {final_count}.")
+    except Exception:
+        pass
