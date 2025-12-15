@@ -151,6 +151,8 @@ def generate_positive_sample(anchor_code):
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print("Generated text")
+    print(generated_text)
     tmp = extract_functions_from_c_file(generated_text)
     if tmp:
         try:
