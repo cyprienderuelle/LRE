@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 # ==================== CONFIGURATION GLOBALE ====================
 
 # MODÈLE POUR LA VITESSE : CodeLlama-3b
-MODEL_ID = "Mistral-7B-v0.1" 
+MODEL_ID = "deepseek-ai/deepseek-coder-6.7b-instruct" 
 BASE_PATH = "./"
 DATASET_PATH = BASE_PATH + "List_functions.jsonl"
 OUTPUT_PATH = BASE_PATH + "List_functions_positif.jsonl"
