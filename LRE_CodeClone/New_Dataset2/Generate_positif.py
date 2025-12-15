@@ -124,13 +124,13 @@ def generate_positive_sample(anchor_code):
         "Add intermediate variables"
     ]
     technique = random.choice(techniques)
-    prompt = f"""Rewrite this C function keeping EXACTLY the same functionality.
-Apply: {technique}
-Original:
-```c
-{anchor_code}
-Refactored version (same behavior, different code):
-```c """
+    prompt = f"""You are an expert C programmer. Rewrite the following C function in C language, keeping the EXACTLY SAME FUNCTION SIGNATURE and EXACTLY SAME SEMANTIC BEHAVIOR. Apply the refactoring technique: {technique}.
+
+                    <|begin_of_original_function|>
+                    {anchor_code}
+                    <|end_of_original_function|>
+
+                    <|begin_of_rewritten_function|>"""
 
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
