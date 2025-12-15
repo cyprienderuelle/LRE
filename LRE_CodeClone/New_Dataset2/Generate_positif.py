@@ -139,7 +139,7 @@ def generate_positive_sample(anchor_code):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=len(anchor_code)*0.75,
+            max_new_tokens=len(anchor_code.split())*0.75,
             temperature=0.8,
             num_beams=1,
             do_sample=True,
@@ -153,7 +153,10 @@ def generate_positive_sample(anchor_code):
     print(generated_text)
     tmp = extract_functions_from_c_file(generated_text)
     if tmp:
-        return tmp[0]["full_text"]
+        try:
+            return tmp[1]["full_text"]
+        except IndexError:
+            return tmp[0]["full_text"]
     else:
         return anchor_code
 
