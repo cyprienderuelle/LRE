@@ -161,7 +161,7 @@ def generate_positive_sample(anchor_code):
             print("ok")
             return (tmp[1]["full_text"], True)
         except IndexError:
-            print(tmp[0]["full_text"])
+            print(generated_text)
             return (tmp[0]["full_text"], False)
     else:
         print(generated_text)
