@@ -127,13 +127,23 @@ def generate_positive_sample(anchor_code):
         "Add intermediate variables"
     ]
     technique = random.choice(techniques)
-    prompt = f"""You are an expert C programmer. Rewrite the following C function in C language, keeping the EXACTLY SAME FUNCTION SIGNATURE and EXACTLY SAME SEMANTIC BEHAVIOR. Generate the REWRITTEN C function ONLY. Apply the refactoring technique: {technique}.
+    prompt = f"""<|begin_of_instruction|>
+            You are an expert C programmer. 
+            Task: Rewrite the provided C function using the technique: "{technique}".
 
-                    <|begin_of_original_function|>
-                    {anchor_code}
-                    <|end_of_original_function|>
+            Constraints:
+            1. Keep the EXACTLY SAME FUNCTION SIGNATURE.
+            2. Maintain the EXACTLY SAME SEMANTIC BEHAVIOR.
+            3. DO NOT include headers (#include), typedefs, or struct definitions.
+            4. DO NOT add any comments, explanations, or markdown formatting (like ```c).
+            5. Start your response directly with the function's return type.
+            <|end_of_instruction|>
 
-                    <|begin_of_rewritten_function|>"""
+            <|begin_of_original_function|>
+            {anchor_code}
+            <|end_of_original_function|>
+
+            <|begin_of_rewritten_function|>"""
 
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
@@ -141,30 +151,25 @@ def generate_positive_sample(anchor_code):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=int(len(anchor_code.split())*1.6 + len(prompt.split())*1.2),
+            max_new_tokens=1024,
             temperature=0.8,
             num_beams=1,
             do_sample=True,
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id
+            eos_token_id=tokenizer.eos_token_id,
+            stop_words = ["<|end_of_rewritten_function|>"]
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     tmp = extract_functions_from_c_file(generated_text)
-    print()
-    print("-----------------------------------")
-    print()
     if tmp:
         try:
-            print("ok")
             return (tmp[1]["full_text"], True)
         except IndexError:
-            print(generated_text)
             return (tmp[0]["full_text"], False)
     else:
-        print(generated_text)
         return (anchor_code, False)
 
 # ======================= GENERATION PAR BATCH =======================
