@@ -141,7 +141,7 @@ def generate_positive_sample(anchor_code):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=int(len(anchor_code.split())*2 + len(prompt.split())*1.2),
+            max_new_tokens=int(len(anchor_code.split())*1.6 + len(prompt.split())*1.2),
             temperature=0.8,
             num_beams=1,
             do_sample=True,
@@ -151,15 +151,20 @@ def generate_positive_sample(anchor_code):
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print("Generated text")
-    print(generated_text)
+
     tmp = extract_functions_from_c_file(generated_text)
+    print()
+    print("-----------------------------------")
+    print()
     if tmp:
         try:
+            print("ok")
             return (tmp[1]["full_text"], True)
         except IndexError:
+            print(tmp[0]["full_text"])
             return (tmp[0]["full_text"], False)
     else:
+        print(generated_text)
         return (anchor_code, False)
 
 # ======================= GENERATION PAR BATCH =======================
