@@ -157,8 +157,7 @@ def generate_positive_sample(anchor_code):
             do_sample=True,
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-            stop_strings=["<|end_of_original_function|>"]
+            eos_token_id=tokenizer.eos_token_id
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
