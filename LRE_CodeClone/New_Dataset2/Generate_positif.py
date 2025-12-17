@@ -158,16 +158,21 @@ def generate_positive_sample(anchor_code):
             repetition_penalty=1.12,
             pad_token_id=tokenizer.pad_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            stop_words = ["<|end_of_rewritten_function|>"]
+            stop_strings=["<|end_of_original_function|>"]
         )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     tmp = extract_functions_from_c_file(generated_text)
+    print()
+    print("--------------------------------")
+    print()
     if tmp:
         try:
+            print("ok")
             return (tmp[1]["full_text"], True)
         except IndexError:
+            print(generated_text)
             return (tmp[0]["full_text"], False)
     else:
         return (anchor_code, False)
