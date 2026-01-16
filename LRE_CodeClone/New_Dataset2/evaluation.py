@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModelForMaskedLM, AutoTokenizer, AutoModel
 from pathlib import Path
 import json
 from tqdm import tqdm
@@ -28,15 +28,12 @@ with open(path_dataset_test, "r") as f:
 print(f"Dataset d'évaluation: {sum(len(v) for v in triplets_by_type.values())} triplets")
 print(f"Nombre de types différents: {len(triplets_by_type)}\n")
 
+# Dans evaluation.py, modifie la fonction load_model_from_checkpoint
 def load_model_from_checkpoint(checkpoint_path, device):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
-    base_model = AutoModel.from_pretrained(checkpoint_path)
+    # 1. Utilise ForMaskedLM au lieu de AutoModel
+    base_model = AutoModelForMaskedLM.from_pretrained(checkpoint_path)
     model = SpladeTripletModel(base_model).to(device)
-
-    training_state_path = Path(checkpoint_path) / "training_state.pt"
-    if training_state_path.exists():
-        state = torch.load(training_state_path, map_location=device)
-        model.proj.load_state_dict(state['projection_layer'])
 
     model.eval()
     return model, tokenizer
