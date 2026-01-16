@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 import json
 from torch.utils.data import random_split
+from peft import LoraConfig, get_peft_model
 
 def load_triplets_optimized(filepath, max_size=1000000):
 
@@ -35,9 +36,8 @@ for i in range(len(my_triplets_list)):
 #seulement les 1000 premiers pour le test
 tmp_my_triplets_list = tmp_my_triplets_list[:1000]
 
-
 checkpoint = "naver/splade_v2_max"
-batch_size = 256 # a augmenté
+batch_size = 128 # a augmenté
 epochs = 5
 lr = 1e-5
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -180,6 +180,23 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 base_model = AutoModel.from_pretrained(checkpoint)
 model = SpladeTripletModel(base_model).to(device)
+model.base.gradient_checkpointing_enable()
+
+# 2. Configurer LoRA
+lora_config = LoraConfig(
+    r=16,                # Rang (plus c'est haut, plus c'est précis mais lourd)
+    lora_alpha=32,       # Facteur d'échelle
+    target_modules=["query", "value"], # Cible les couches d'attention de BERT
+    lora_dropout=0.05,
+    bias="none",
+    modules_to_save=["proj"] # Optionnel : si tu as une couche de projection perso
+)
+
+# 3. Appliquer LoRA
+model.base = get_peft_model(base_model, lora_config)
+
+# Afficher le nombre de paramètres entraînables
+model.base.print_trainable_parameters()
 
 loss_fn = InfoNCELoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
