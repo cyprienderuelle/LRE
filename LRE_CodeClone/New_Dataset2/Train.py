@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModelForMaskedLM, AutoTokenizer, AutoModel
 from tqdm import tqdm
 import os
 import json
@@ -26,52 +26,37 @@ class TripletDataset(Dataset):
         return a_enc, p_enc, n_enc
 
 class SpladeTripletModel(nn.Module):
-    def __init__(self, base_model, vocab_size=30522):
+    def __init__(self, base_model):
         super().__init__()
-        self.base = base_model
-        self.vocab_size = vocab_size
-        self.proj = nn.Linear(base_model.config.hidden_size, vocab_size)
+        self.base = base_model # base_model est ici un AutoModelForMaskedLM
 
     def forward(self, input_ids, attention_mask=None):
         outputs = self.base(input_ids=input_ids, attention_mask=attention_mask)
-        hidden = outputs.last_hidden_state
-        logits = self.proj(hidden)
+        # On utilise les logits déjà calculés par la tête MLM de Naver
+        logits = outputs.logits 
+        
         sparse_emb = torch.log1p(F.relu(logits))
-
         if attention_mask is not None:
             sparse_emb = sparse_emb * attention_mask.unsqueeze(-1)
-        sparse_vec = torch.max(sparse_emb, dim=1).values
-        return sparse_vec
+        
+        return torch.max(sparse_emb, dim=1).values
 
 class InfoNCELoss(nn.Module):
     def __init__(self, temperature=0.07):
-        """
-        Args:
-            temperature: Paramètre de lissage (tau). 
-                        Une valeur basse (0.07) rend le modèle plus sélectif.
-        """
         super().__init__()
         self.temperature = temperature
         self.cross_entropy = nn.CrossEntropyLoss()
 
     def forward(self, emb_anchor, emb_pos, emb_neg=None):
-        """
-        Args:
-            emb_anchor: [batch_size, dim]
-            emb_pos:    [batch_size, dim]
-            emb_neg:    [batch_size, dim] (Optionnel si tu utilises les In-batch negatives)
-        """
-        emb_anchor = F.normalize(emb_anchor, p=2, dim=-1)
-        emb_pos = F.normalize(emb_pos, p=2, dim=-1)
+        
+        # On utilise le produit scalaire (Dot Product) direct
         logits = torch.matmul(emb_anchor, emb_pos.T) / self.temperature
 
         if emb_neg is not None:
-            emb_neg = F.normalize(emb_neg, p=2, dim=-1)
             score_neg = torch.sum(emb_anchor * emb_neg, dim=-1, keepdim=True) / self.temperature
             logits = torch.cat([logits, score_neg], dim=1)
 
         labels = torch.arange(emb_anchor.size(0)).to(emb_anchor.device)
-
         return self.cross_entropy(logits, labels)
 
 if __name__ == "__main__":
@@ -119,38 +104,32 @@ if __name__ == "__main__":
         total_dist_neg = 0
         total_samples = 0
 
+        # --- À l'intérieur de compute_validation_metrics ---
         with torch.no_grad():
             for batch in dataloader:
                 a_enc, p_enc, n_enc = batch
                 
-                # 1. Encodage et Normalisation L2 (essentiel pour la similarité cosinus)
-                emb_a = F.normalize(model(a_enc['input_ids'].squeeze(1).to(device), a_enc['attention_mask'].squeeze(1).to(device)), p=2, dim=-1)
-                emb_p = F.normalize(model(p_enc['input_ids'].squeeze(1).to(device), p_enc['attention_mask'].squeeze(1).to(device)), p=2, dim=-1)
-                emb_n = F.normalize(model(n_enc['input_ids'].squeeze(1).to(device), n_enc['attention_mask'].squeeze(1).to(device)), p=2, dim=-1)
+                # 1. Encodage SANS normalisation
+                emb_a = model(a_enc['input_ids'].squeeze(1).to(device), a_enc['attention_mask'].squeeze(1).to(device))
+                emb_p = model(p_enc['input_ids'].squeeze(1).to(device), p_enc['attention_mask'].squeeze(1).to(device))
+                emb_n = model(n_enc['input_ids'].squeeze(1).to(device), n_enc['attention_mask'].squeeze(1).to(device))
 
                 batch_size = emb_a.size(0)
                 total_samples += batch_size
 
-                # 2. Calcul des distances moyennes (L2) pour diagnostic
-                total_dist_pos += torch.norm(emb_a - emb_p, p=2, dim=1).sum().item()
-                total_dist_neg += torch.norm(emb_a - emb_n, p=2, dim=1).sum().item()
-
-                # 3. Matrice de scores (Cosine Similarity via dot product sur vecteurs normalisés)
-                # scores[i][j] = similarité entre ancre i et positif j
+                # 2. Calcul des scores via Produit Scalaire (Dot Product)
+                # scores[i][j] est la pertinence entre l'ancre i et le positif j
                 scores = torch.matmul(emb_a, emb_p.T) 
                 target = torch.arange(batch_size).to(device)
+        
 
                 # --- TOP-1 & TOP-K ---
                 _, topk_indices = scores.topk(k, dim=1)
                 correct_top1 += (topk_indices[:, 0] == target).sum().item()
                 correct_topk += (topk_indices == target.unsqueeze(1)).any(dim=1).sum().item()
 
-                # --- MEAN RECIPROCAL RANK (MRR) ---
-                # On trie tous les scores par ligne
                 _, all_indices = torch.sort(scores, descending=True, dim=1)
                 
-                # On trouve le rang du vrai positif pour chaque ancre du batch
-                # (target == all_indices).nonzero() renvoie les coordonnées du 1.0
                 ranks = (all_indices == target.unsqueeze(1)).nonzero()[:, 1] + 1
                 mrr_sum += (1.0 / ranks.float()).sum().item()
 
@@ -178,7 +157,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-    base_model = AutoModel.from_pretrained(checkpoint)
+    base_model = AutoModelForMaskedLM.from_pretrained(checkpoint)
     model = SpladeTripletModel(base_model).to(device)
     model.base.gradient_checkpointing_enable()
 
@@ -189,8 +168,7 @@ if __name__ == "__main__":
         target_modules=["q_lin", "k_lin", "v_lin", "out_lin"], 
         lora_dropout=0.05,
         bias="none",
-        # On garde 'proj' si tu as une couche personnalisée dans ton SpladeModel
-        modules_to_save=["proj"] 
+        modules_to_save=["cls"] 
     )
 
     # 3. Appliquer LoRA
@@ -337,7 +315,7 @@ if __name__ == "__main__":
         tokenizer.save_pretrained(checkpoint_dir)
 
         torch.save({
-            'projection_layer': model.proj.state_dict(),
+            'state_dict': model.state_dict(),
             'optimizer_state': optimizer.state_dict(),
             'epoch': epoch + 1,
             'loss': avg_loss,
