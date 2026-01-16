@@ -40,7 +40,6 @@ with open(input_file, 'r', encoding='utf-8') as f:
         raw_data.append(json.loads(line))
 
 ancres_text = [d['anchor'] for d in raw_data]
-ancres_text = ancres_text[:1000] # Pour test rapide, à enlever pour le dataset complet
 
 # --- ENCODAGE ---
 # Attention : si 500k, cela prendra ~2-4h selon le GPU
