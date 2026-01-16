@@ -354,8 +354,7 @@ for epoch in range(epochs):
             "model_config": {
                 "checkpoint": checkpoint,
                 "batch_size": batch_size,
-                "learning_rate": lr,
-                "margin": loss_fn.margin
+                "learning_rate": lr
             },
             "history": training_history
         }, f, indent=2)
