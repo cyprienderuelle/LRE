@@ -21,7 +21,7 @@ def load_triplets_optimized(filepath, max_size=1000000):
 
     return triplets
 
-my_triplets_list = load_triplets_optimized("Dataset_infoNCE_HardNeg.jsonl")
+my_triplets_list = load_triplets_optimized("Dataset_InfoNCE_HardNeg.jsonl")
 
 tmp_my_triplets_list = []
 my_triplets_list_test = []
