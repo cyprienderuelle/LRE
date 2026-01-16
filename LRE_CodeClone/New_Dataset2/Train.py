@@ -33,8 +33,7 @@ for i in range(len(my_triplets_list)):
   else:
     my_triplets_list_test.append(my_triplets_list[i])
 
-#seulement les 1000 premiers pour le test
-tmp_my_triplets_list = tmp_my_triplets_list[:1000]
+tmp_my_triplets_list = tmp_my_triplets_list
 
 checkpoint = "naver/splade_v2_max"
 batch_size = 128 # a augmenté
