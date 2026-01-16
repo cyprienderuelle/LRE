@@ -182,14 +182,16 @@ base_model = AutoModel.from_pretrained(checkpoint)
 model = SpladeTripletModel(base_model).to(device)
 model.base.gradient_checkpointing_enable()
 
-# 2. Configurer LoRA
 lora_config = LoraConfig(
     r=16,
     lora_alpha=32,
-    # Pour BERT/RoBERTa/SPLADE, on utilise souvent ces noms de modules :
-    target_modules=["query", "key", "value"], 
+    # On utilise les noms exacts des couches d'attention de BERT
+    target_modules=["self.query", "self.key", "self.value"], 
     lora_dropout=0.05,
-    bias="none"
+    bias="none",
+    # TRÈS IMPORTANT : SPLADE utilise la couche 'cls' pour la prédiction MLM
+    # Si tu as une couche de projection dans ton SpladeModel, ajoute-la ici :
+    modules_to_save=["proj"] 
 )
 
 # 3. Appliquer LoRA
