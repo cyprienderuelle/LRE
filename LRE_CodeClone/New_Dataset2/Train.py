@@ -185,12 +185,11 @@ model.base.gradient_checkpointing_enable()
 lora_config = LoraConfig(
     r=16,
     lora_alpha=32,
-    # On utilise les noms exacts des couches d'attention de BERT
-    target_modules=["self.query", "self.key", "self.value"], 
+    # Noms exacts des couches Linéaires pour DistilBERT
+    target_modules=["q_lin", "k_lin", "v_lin", "out_lin"], 
     lora_dropout=0.05,
     bias="none",
-    # TRÈS IMPORTANT : SPLADE utilise la couche 'cls' pour la prédiction MLM
-    # Si tu as une couche de projection dans ton SpladeModel, ajoute-la ici :
+    # On garde 'proj' si tu as une couche personnalisée dans ton SpladeModel
     modules_to_save=["proj"] 
 )
 
