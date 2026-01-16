@@ -11,7 +11,7 @@ model_id = "naver/splade_v2_max"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 input_file = 'Resultat.jsonl'
 output_file = 'Dataset_InfoNCE_HardNeg.jsonl'
-CHUNK_SIZE = 50000 
+CHUNK_SIZE = 1500 
 BATCH_SIZE = 128
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -35,7 +35,7 @@ if os.path.exists(output_file):
 # Barre de progression principale pour tout le dataset
 main_pbar = tqdm(total=total_count, desc="Progression Totale", unit="anchor")
 
-for start_idx in range(0, 499999, CHUNK_SIZE):
+for start_idx in range(0, total_count, CHUNK_SIZE):
     end_idx = min(start_idx + CHUNK_SIZE, total_count)
     
     # 1. Encodage du bloc avec sa propre barre
@@ -60,15 +60,18 @@ for start_idx in range(0, 499999, CHUNK_SIZE):
     
     # 2. Recherche des Hard Negatives dans le bloc
     with open(output_file, 'a', encoding='utf-8') as f_out:
-        # On utilise une barre discrète pour la recherche
+        # Ajout d'une barre de progression pour la recherche intra-bloc
+        search_pbar = tqdm(total=len(chunk_texts), desc=f" ↪ Recherche Bloc {start_idx//CHUNK_SIZE + 1}", leave=False)
+        
         for i in range(len(chunk_texts)):
             query_vec = chunk_embeddings[i].unsqueeze(0)
+            
+            # Calcul de similarité
             scores = torch.mm(query_vec, chunk_embeddings.t()).squeeze(0)
             
             top_k = min(10, len(chunk_texts))
             top_indices = torch.topk(scores, k=top_k).indices.cpu().tolist()
             
-            # On évite de se choisir soi-même
             neighbors = [idx for idx in top_indices if idx != i][:5]
             neg_idx_in_chunk = random.choice(neighbors) if neighbors else random.randint(0, len(chunk_texts)-1)
             
@@ -82,6 +85,11 @@ for start_idx in range(0, 499999, CHUNK_SIZE):
                 "type": raw_data[current_real_idx].get('type', -1)
             }
             f_out.write(json.dumps(output_obj) + '\n')
+            
+            # Mise à jour de la barre de recherche
+            search_pbar.update(1)
+            
+        search_pbar.close() # On ferme la barre du bloc une fois fini
     
     # Nettoyage
     del chunk_embeddings
