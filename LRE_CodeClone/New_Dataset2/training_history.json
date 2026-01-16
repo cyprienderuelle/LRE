@@ -1,0 +1,145 @@
+{
+  "total_epochs": 5,
+  "model_config": {
+    "checkpoint": "naver/splade_v2_max",
+    "batch_size": 128,
+    "learning_rate": 1e-05
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "losses": {
+        "total": 4.289774247578213,
+        "triplet": 0.0,
+        "sparsity": 0.0,
+        "val_avg": 4.0672653913497925,
+        "min_batch": 3.1654860973358154,
+        "max_batch": 4.500720977783203
+      },
+      "metrics": {
+        "sparsity_percent": 12.36812790773868,
+        "non_zero_dims": 26747,
+        "top1_acc": 94.0,
+        "top5_acc": 98.5,
+        "mmr": 0.9627253341674805,
+        "dist_pos_avg": 0.14551311016082763,
+        "dist_neg_avg": 0.20462092399597168,
+        "contrast_gap": 0.059107813835144046,
+        "total_dims": 30522
+      },
+      "hyperparameters": {
+        "learning_rate": 1e-05,
+        "batch_size": 128,
+        "num_batches": 7
+      }
+    },
+    {
+      "epoch": 2,
+      "losses": {
+        "total": 4.248537336077009,
+        "triplet": 0.0,
+        "sparsity": 0.0,
+        "val_avg": 4.016237378120422,
+        "min_batch": 3.1067214012145996,
+        "max_batch": 4.469809532165527
+      },
+      "metrics": {
+        "sparsity_percent": 12.676102483454555,
+        "non_zero_dims": 26653,
+        "top1_acc": 94.0,
+        "top5_acc": 98.5,
+        "mmr": 0.9627270889282227,
+        "dist_pos_avg": 0.1512174892425537,
+        "dist_neg_avg": 0.21343594551086426,
+        "contrast_gap": 0.062218456268310546,
+        "total_dims": 30522
+      },
+      "hyperparameters": {
+        "learning_rate": 1e-05,
+        "batch_size": 128,
+        "num_batches": 7
+      }
+    },
+    {
+      "epoch": 3,
+      "losses": {
+        "total": 4.200018610273089,
+        "triplet": 0.0,
+        "sparsity": 0.0,
+        "val_avg": 3.9585423469543457,
+        "min_batch": 3.0269570350646973,
+        "max_batch": 4.448192596435547
+      },
+      "metrics": {
+        "sparsity_percent": 13.00701133608545,
+        "non_zero_dims": 26552,
+        "top1_acc": 94.5,
+        "top5_acc": 98.5,
+        "mmr": 0.9652239990234375,
+        "dist_pos_avg": 0.15730812072753905,
+        "dist_neg_avg": 0.2228892993927002,
+        "contrast_gap": 0.06558117866516114,
+        "total_dims": 30522
+      },
+      "hyperparameters": {
+        "learning_rate": 1e-05,
+        "batch_size": 128,
+        "num_batches": 7
+      }
+    },
+    {
+      "epoch": 4,
+      "losses": {
+        "total": 4.148350170680454,
+        "triplet": 0.0,
+        "sparsity": 0.0,
+        "val_avg": 3.892099380493164,
+        "min_batch": 2.96828556060791,
+        "max_batch": 4.370253562927246
+      },
+      "metrics": {
+        "sparsity_percent": 13.334643863442764,
+        "non_zero_dims": 26452,
+        "top1_acc": 94.5,
+        "top5_acc": 98.5,
+        "mmr": 0.9627245330810547,
+        "dist_pos_avg": 0.16392908096313477,
+        "dist_neg_avg": 0.23321608543395997,
+        "contrast_gap": 0.0692870044708252,
+        "total_dims": 30522
+      },
+      "hyperparameters": {
+        "learning_rate": 1e-05,
+        "batch_size": 128,
+        "num_batches": 7
+      }
+    },
+    {
+      "epoch": 5,
+      "losses": {
+        "total": 4.095219680241176,
+        "triplet": 0.0,
+        "sparsity": 0.0,
+        "val_avg": 3.8150402307510376,
+        "min_batch": 2.9403910636901855,
+        "max_batch": 4.313897609710693
+      },
+      "metrics": {
+        "sparsity_percent": 13.822816329205168,
+        "non_zero_dims": 26303,
+        "top1_acc": 94.0,
+        "top5_acc": 98.5,
+        "mmr": 0.9627264022827149,
+        "dist_pos_avg": 0.17112094402313233,
+        "dist_neg_avg": 0.24450878143310548,
+        "contrast_gap": 0.07338783740997315,
+        "total_dims": 30522
+      },
+      "hyperparameters": {
+        "learning_rate": 1e-05,
+        "batch_size": 128,
+        "num_batches": 7
+      }
+    }
+  ]
+}
