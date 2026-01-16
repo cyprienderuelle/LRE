@@ -9,6 +9,71 @@ import json
 from torch.utils.data import random_split
 from peft import LoraConfig, get_peft_model
 
+class TripletDataset(Dataset):
+    def __init__(self, triplets, tokenizer, max_length=128):
+        self.triplets = triplets
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.triplets)
+
+    def __getitem__(self, idx):
+        anchor, positive, negative, _ = self.triplets[idx]
+        a_enc = self.tokenizer(anchor, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
+        p_enc = self.tokenizer(positive, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
+        n_enc = self.tokenizer(negative, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
+        return a_enc, p_enc, n_enc
+
+class SpladeTripletModel(nn.Module):
+    def __init__(self, base_model, vocab_size=30522):
+        super().__init__()
+        self.base = base_model
+        self.vocab_size = vocab_size
+        self.proj = nn.Linear(base_model.config.hidden_size, vocab_size)
+
+    def forward(self, input_ids, attention_mask=None):
+        outputs = self.base(input_ids=input_ids, attention_mask=attention_mask)
+        hidden = outputs.last_hidden_state
+        logits = self.proj(hidden)
+        sparse_emb = torch.log1p(F.relu(logits))
+
+        if attention_mask is not None:
+            sparse_emb = sparse_emb * attention_mask.unsqueeze(-1)
+        sparse_vec = torch.max(sparse_emb, dim=1).values
+        return sparse_vec
+
+class InfoNCELoss(nn.Module):
+    def __init__(self, temperature=0.07):
+        """
+        Args:
+            temperature: Paramètre de lissage (tau). 
+                        Une valeur basse (0.07) rend le modèle plus sélectif.
+        """
+        super().__init__()
+        self.temperature = temperature
+        self.cross_entropy = nn.CrossEntropyLoss()
+
+    def forward(self, emb_anchor, emb_pos, emb_neg=None):
+        """
+        Args:
+            emb_anchor: [batch_size, dim]
+            emb_pos:    [batch_size, dim]
+            emb_neg:    [batch_size, dim] (Optionnel si tu utilises les In-batch negatives)
+        """
+        emb_anchor = F.normalize(emb_anchor, p=2, dim=-1)
+        emb_pos = F.normalize(emb_pos, p=2, dim=-1)
+        logits = torch.matmul(emb_anchor, emb_pos.T) / self.temperature
+
+        if emb_neg is not None:
+            emb_neg = F.normalize(emb_neg, p=2, dim=-1)
+            score_neg = torch.sum(emb_anchor * emb_neg, dim=-1, keepdim=True) / self.temperature
+            logits = torch.cat([logits, score_neg], dim=1)
+
+        labels = torch.arange(emb_anchor.size(0)).to(emb_anchor.device)
+
+        return self.cross_entropy(logits, labels)
+
 if __name__ == "__main__":
 
     def load_triplets_optimized(filepath, max_size=1000000):
@@ -43,72 +108,6 @@ if __name__ == "__main__":
     lr = 1e-5
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
-
-    # Dataset
-    class TripletDataset(Dataset):
-        def __init__(self, triplets, tokenizer, max_length=128):
-            self.triplets = triplets
-            self.tokenizer = tokenizer
-            self.max_length = max_length
-
-        def __len__(self):
-            return len(self.triplets)
-
-        def __getitem__(self, idx):
-            anchor, positive, negative, _ = self.triplets[idx]
-            a_enc = self.tokenizer(anchor, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
-            p_enc = self.tokenizer(positive, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
-            n_enc = self.tokenizer(negative, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
-            return a_enc, p_enc, n_enc
-
-    class SpladeTripletModel(nn.Module):
-        def __init__(self, base_model, vocab_size=30522):
-            super().__init__()
-            self.base = base_model
-            self.vocab_size = vocab_size
-            self.proj = nn.Linear(base_model.config.hidden_size, vocab_size)
-
-        def forward(self, input_ids, attention_mask=None):
-            outputs = self.base(input_ids=input_ids, attention_mask=attention_mask)
-            hidden = outputs.last_hidden_state
-            logits = self.proj(hidden)
-            sparse_emb = torch.log1p(F.relu(logits))
-
-            if attention_mask is not None:
-                sparse_emb = sparse_emb * attention_mask.unsqueeze(-1)
-            sparse_vec = torch.max(sparse_emb, dim=1).values
-            return sparse_vec
-
-    class InfoNCELoss(nn.Module):
-        def __init__(self, temperature=0.07):
-            """
-            Args:
-                temperature: Paramètre de lissage (tau). 
-                            Une valeur basse (0.07) rend le modèle plus sélectif.
-            """
-            super().__init__()
-            self.temperature = temperature
-            self.cross_entropy = nn.CrossEntropyLoss()
-
-        def forward(self, emb_anchor, emb_pos, emb_neg=None):
-            """
-            Args:
-                emb_anchor: [batch_size, dim]
-                emb_pos:    [batch_size, dim]
-                emb_neg:    [batch_size, dim] (Optionnel si tu utilises les In-batch negatives)
-            """
-            emb_anchor = F.normalize(emb_anchor, p=2, dim=-1)
-            emb_pos = F.normalize(emb_pos, p=2, dim=-1)
-            logits = torch.matmul(emb_anchor, emb_pos.T) / self.temperature
-
-            if emb_neg is not None:
-                emb_neg = F.normalize(emb_neg, p=2, dim=-1)
-                score_neg = torch.sum(emb_anchor * emb_neg, dim=-1, keepdim=True) / self.temperature
-                logits = torch.cat([logits, score_neg], dim=1)
-
-            labels = torch.arange(emb_anchor.size(0)).to(emb_anchor.device)
-
-            return self.cross_entropy(logits, labels)
 
     def compute_validation_metrics(model, dataloader, device, k=5):
         model.eval()
