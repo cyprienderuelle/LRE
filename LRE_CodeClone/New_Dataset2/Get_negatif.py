@@ -11,7 +11,7 @@ model_id = "naver/splade_v2_max"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 input_file = 'Resultat.jsonl'
 output_file = 'Dataset_InfoNCE_HardNeg.jsonl'
-CHUNK_SIZE = 1500 
+CHUNK_SIZE = 10000 
 BATCH_SIZE = 128
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
