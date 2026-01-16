@@ -12,62 +12,73 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForMaskedLM.from_pretrained(model_id).to(device)
 model.eval()
 
-def get_splade_embeddings(texts, batch_size=32):
-    """ Calcule les vecteurs SPLADE pour une liste de textes """
+def get_splade_embeddings(texts, batch_size=64):
     all_embeddings = []
     for i in tqdm(range(0, len(texts), batch_size), desc="Encoding SPLADE"):
-        batch = texts[i : i + batch_size]
+        batch = [t[:1000] for t in texts[i : i + batch_size]] # Troncature légère pour la rapidité
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
         
         with torch.no_grad():
             outputs = model(**inputs)
-            # Logique SPLADE : max sur la dimension sequence, activation ReLU et log
             logits = outputs.logits
             vecs = torch.max(torch.log(1 + torch.relu(logits)) * inputs.attention_mask.unsqueeze(-1), dim=1).values
         
+        # On normalise immédiatement pour accélérer le calcul cos_sim plus tard
+        vecs = torch.nn.functional.normalize(vecs, p=2, dim=1)
         all_embeddings.append(vecs.cpu())
     
     return torch.cat(all_embeddings)
 
-# --- CHARGEMENT DES DONNÉES ---
-ancres = []
-with open('Resultat.jsonl', 'r', encoding='utf-8') as f:
+# --- CHARGEMENT ---
+input_file = 'Resultat.jsonl'
+output_file = 'Dataset_InfoNCE_HardNeg.jsonl'
+
+print("Chargement des données en mémoire...")
+raw_data = []
+with open(input_file, 'r', encoding='utf-8') as f:
     for line in f:
-        ancres.append(json.loads(line)['anchor'])
-        if len(ancres) >= 10000: break # Test sur 10k pour commencer
+        raw_data.append(json.loads(line))
 
-# --- CALCUL ET RECHERCHE ---
+ancres_text = [d['anchor'] for d in raw_data]
+ancres_text = ancres_text[:1000] # Pour test rapide, à enlever pour le dataset complet
 
-# 1. Encodage de toutes les ancres
-embeddings = get_splade_embeddings(ancres).to(device)
+# --- ENCODAGE ---
+# Attention : si 500k, cela prendra ~2-4h selon le GPU
+embeddings = get_splade_embeddings(ancres_text, batch_size=128)
 
-def find_random_top5_neighbor(query_idx, embeddings, top_k=6): # 6 car l'ancre elle-même sera top 1
-    # Calcul de la similarité cosinus (vecteurs normalisés)
-    query_vec = embeddings[query_idx].unsqueeze(0)
-    
-    # Normalisation pour cos_sim
-    query_vec = torch.nn.functional.normalize(query_vec, p=2, dim=1)
-    dataset_vecs = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-    
-    # Produit matriciel pour obtenir les scores
-    scores = torch.mm(query_vec, dataset_vecs.t()).squeeze(0)
-    
-    # Récupération des indices des top_k
-    top_indices = torch.topk(scores, k=top_k).indices.cpu().tolist()
-    
-    # On retire l'indice de la requête elle-même (souvent le premier)
-    neighbors = [idx for idx in top_indices if idx != query_idx]
-    
-    # On prend les 5 premiers restants et on en choisit un au hasard
-    selected_neighbor_idx = random.choice(neighbors[:5])
-    return selected_neighbor_idx, scores[selected_neighbor_idx].item()
+# --- RECHERCHE ET SAUVEGARDE ---
+print(f"Génération du fichier final : {output_file}")
+embeddings = embeddings.to(device)
 
-# --- EXEMPLE D'UTILISATION ---
-idx_test = random.randint(0, len(ancres)-1)
-neighbor_idx, score = find_random_top5_neighbor(idx_test, embeddings)
+with open(output_file, 'w', encoding='utf-8') as f_out:
+    # On traite par blocs pour la matrice de similarité (évite OOM GPU)
+    step = 1000 
+    for i in tqdm(range(0, len(ancres_text)), desc="Recherche Hard Negatives"):
+        # Calcul des scores pour l'ancre actuelle contre TOUTES les autres
+        query_vec = embeddings[i].unsqueeze(0)
+        scores = torch.mm(query_vec, embeddings.t()).squeeze(0)
+        
+        # On récupère les top_k (k=10 pour être large et filtrer l'ancre elle-même)
+        top_k = 10
+        top_indices = torch.topk(scores, k=top_k).indices.cpu().tolist()
+        
+        # Filtrer l'ancre elle-même et garder le top 5
+        neighbors = [idx for idx in top_indices if idx != i][:5]
+        
+        if not neighbors:
+            # Sécurité si aucun voisin n'est trouvé (cas rare)
+            neg_idx = random.randint(0, len(ancres_text)-1)
+        else:
+            neg_idx = random.choice(neighbors)
+            
+        # Construction de l'objet final
+        output_obj = {
+            "anchor": raw_data[i]['anchor'],
+            "pos": raw_data[i]['positif'],
+            "neg": raw_data[neg_idx]['anchor'],
+            "type": raw_data[i].get('type', -1)
+        }
+        
+        f_out.write(json.dumps(output_obj) + '\n')
 
-print(f"\n--- ANCRE ORIGINALE (Index {idx_test}) ---")
-print(ancres[idx_test][:200] + "...")
-
-print(f"\n--- VOISIN SÉLECTIONNÉ (Index {neighbor_idx}, Score SPLADE: {score:.4f}) ---")
-print(ancres[neighbor_idx][:200] + "...")
+print("Terminé !")
