@@ -184,12 +184,12 @@ model.base.gradient_checkpointing_enable()
 
 # 2. Configurer LoRA
 lora_config = LoraConfig(
-    r=16,                # Rang (plus c'est haut, plus c'est précis mais lourd)
-    lora_alpha=32,       # Facteur d'échelle
-    target_modules=["query", "value"], # Cible les couches d'attention de BERT
+    r=16,
+    lora_alpha=32,
+    # Pour BERT/RoBERTa/SPLADE, on utilise souvent ces noms de modules :
+    target_modules=["query", "key", "value"], 
     lora_dropout=0.05,
-    bias="none",
-    modules_to_save=["proj"] # Optionnel : si tu as une couche de projection perso
+    bias="none"
 )
 
 # 3. Appliquer LoRA
