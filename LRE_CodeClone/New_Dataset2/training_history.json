@@ -9,22 +9,22 @@
     {
       "epoch": 1,
       "losses": {
-        "total": 0.38323690302914576,
+        "total": 0.38231604477395265,
         "triplet": 0.0,
         "sparsity": 0.0,
-        "val_avg": 0.12212711066007614,
-        "min_batch": 0.09422168135643005,
-        "max_batch": 4.444230079650879
+        "val_avg": 0.02102900268054851,
+        "min_batch": 0.0,
+        "max_batch": 9.762782096862793
       },
       "metrics": {
-        "sparsity_percent": 43.72256077583383,
-        "non_zero_dims": 17177,
-        "top1_acc": 99.94745204999562,
-        "top5_acc": 99.99874885833323,
-        "mmr": 0.999728085255634,
-        "dist_pos_avg": 0.4060216281299099,
-        "dist_neg_avg": 0.94730500357478,
-        "contrast_gap": 0.54128337544487,
+        "sparsity_percent": 99.96723674726427,
+        "non_zero_dims": 10,
+        "top1_acc": 99.78605477498218,
+        "top5_acc": 99.97497716666459,
+        "mmr": 0.9987602431954876,
+        "dist_pos_avg": 0.0,
+        "dist_neg_avg": 0.0,
+        "contrast_gap": 0.0,
         "total_dims": 30522
       },
       "hyperparameters": {
