@@ -1,6 +1,5 @@
 import re
 import random
-from nltk.corpus import wordnet as wn
 
 class samples:
     def __init__(self, name, function, type=-1):
