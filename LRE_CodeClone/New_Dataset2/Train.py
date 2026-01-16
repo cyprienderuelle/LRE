@@ -88,9 +88,10 @@ if __name__ == "__main__":
     tmp_my_triplets_list = tmp_my_triplets_list
 
     checkpoint = "naver/splade_v2_max"
-    batch_size = 128 # a augmenté
-    epochs = 5
+    batch_size = 512 # a augmenté
+    epochs = 1
     lr = 1e-5
+    lambda_sparsity = 0.0008
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
 
@@ -214,7 +215,16 @@ if __name__ == "__main__":
             emb_p = model(p_ids, p_mask)
             emb_n = model(n_ids, n_mask)
 
-            loss = loss_fn(emb_a, emb_p, emb_n)
+            loss_contrastive = loss_fn(emb_a, emb_p, emb_n)
+
+            l1_penalty = (
+                torch.mean(torch.sum(torch.abs(emb_a), dim=-1)) +
+                torch.mean(torch.sum(torch.abs(emb_p), dim=-1)) +
+                torch.mean(torch.sum(torch.abs(emb_n), dim=-1))
+            ) / 3
+
+            loss = loss_contrastive + (lambda_sparsity * l1_penalty)
+
             loss.backward()
             optimizer.step()
 
