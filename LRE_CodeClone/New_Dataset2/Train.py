@@ -54,7 +54,7 @@ class TripletDataset(Dataset):
         return len(self.triplets)
 
     def __getitem__(self, idx):
-        anchor, positive, negative = self.triplets[idx]
+        anchor, positive, negative, _ = self.triplets[idx]
         a_enc = self.tokenizer(anchor, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
         p_enc = self.tokenizer(positive, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
         n_enc = self.tokenizer(negative, return_tensors="pt", padding="max_length", truncation=True, max_length=self.max_length)
