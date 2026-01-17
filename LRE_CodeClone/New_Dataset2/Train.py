@@ -7,7 +7,7 @@ from tqdm import tqdm
 import os
 import json
 from torch.utils.data import random_split
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PeftModel
 
 class TripletDataset(Dataset):
     def __init__(self, triplets, tokenizer, max_length=128):
@@ -94,6 +94,7 @@ if __name__ == "__main__":
     lambda_sparsity = 0.0008
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
+    lora_checkpoint_path = "./checkpoint_epoch_81acc_1" 
 
     def compute_validation_metrics(model, dataloader, device, k=5):
         model.eval()
@@ -172,8 +173,16 @@ if __name__ == "__main__":
         modules_to_save=["cls"] 
     )
 
-    # 3. Appliquer LoRA
-    model.base = get_peft_model(base_model, lora_config)
+    # 2. Charger les poids LoRA de ton modèle à 81% DIRECTEMENT sur le base_model
+    print(f"Chargement des poids fine-tunés depuis {lora_checkpoint_path}...")
+    base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path)
+
+    # 3. Rendre les poids LoRA entraînables (très important !)
+    base_model.train() 
+
+    # 4. Encapsuler le tout dans ta classe Splade
+    model = SpladeTripletModel(base_model).to(device)
+    model.base.gradient_checkpointing_enable()
 
     # Afficher le nombre de paramètres entraînables
     model.base.print_trainable_parameters()
