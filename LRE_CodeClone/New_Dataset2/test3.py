@@ -21,7 +21,7 @@ def get_splade_vec(text):
         return vec
 
 # --- COMPARAISON ---
-file1 = 'Dataset_InfoNCE_V1.jsonl'
+file1 = 'Dataset_InfoNCE_HardNeg.jsonl'
 file2 = 'Dataset_InfoNCE_HardNeg_V2.jsonl'
 
 similarities_v1 = []
