@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
         return triplets
 
-    my_triplets_list = load_triplets_optimized("Dataset_InfoNCE_HardNeg.jsonl")
+    my_triplets_list = load_triplets_optimized("Dataset_InfoNCE_HardNeg_V2.jsonl")
 
     tmp_my_triplets_list = []
     my_triplets_list_test = []
