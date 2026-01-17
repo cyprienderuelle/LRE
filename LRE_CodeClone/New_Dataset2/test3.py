@@ -1,34 +1,49 @@
 import json
-from collections import Counter
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+from peft import PeftModel
 
-def get_tokens(text):
-    # Simple tokenisation pour comparer le contenu
-    return set(text.lower().split())
+# --- CONFIG ---
+model_id = "naver/splade_v2_max"
+lora_path = "./checkpoint_epoch_1" # Ton modèle à 81%
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def analyze_dataset(filepath):
-    overlap_scores = []
-    lengths = []
-    
-    with open(filepath, 'r') as f:
-        for line in f:
-            data = json.loads(line)
-            ancre_tokens = get_tokens(data['ancre'])
-            neg_tokens = get_tokens(data['neg'])
-            
-            # Calcul de l'intersection (mots communs entre ancre et négatif)
-            intersection = ancre_tokens.intersection(neg_tokens)
-            overlap_scores.append(len(intersection))
-            lengths.append(len(neg_tokens))
-            
-    avg_overlap = sum(overlap_scores) / len(overlap_scores)
-    avg_len = sum(lengths) / len(lengths)
-    return avg_overlap, avg_len
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+base = AutoModelForMaskedLM.from_pretrained(model_id)
+model = PeftModel.from_pretrained(base, lora_path).to(device)
+model.eval()
 
-# Comparaison
-v1_overlap, v1_len = analyze_dataset('Dataset_InfoNCE_HardNeg.jsonl')
-v2_overlap, v2_len = analyze_dataset('Dataset_InfoNCE_HardNeg_V2.jsonl')
+def get_splade_vec(text):
+    with torch.no_grad():
+        tokens = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(device)
+        out = model(**tokens)
+        vec = torch.max(torch.log1p(torch.relu(out.logits)) * tokens.attention_mask.unsqueeze(-1), dim=1).values
+        return vec
 
-print(f"--- Analyse de la difficulté des Négatifs ---")
-print(f"V1 (Aléatoire/Simple) : Mots communs Ancre-Neg = {v1_overlap:.2f}")
-print(f"V2 (Modèle 81%)      : Mots communs Ancre-Neg = {v2_overlap:.2f}")
-print(f"\nDifférence d'overlap : {((v2_overlap/v1_overlap)-1)*100:.1f}%")
+# --- COMPARAISON ---
+file1 = 'Dataset_InfoNCE_V1.jsonl'
+file2 = 'Dataset_InfoNCE_HardNeg_V2.jsonl'
+
+similarities_v1 = []
+similarities_v2 = []
+
+with open(file1, 'r') as f1, open(file2, 'r') as f2:
+    # On compare les 100 premiers pour avoir une idée
+    for _ in range(100):
+        d1 = json.loads(f1.readline())
+        d2 = json.loads(f2.readline())
+        
+        # On encode l'ancre et les deux négatifs
+        v_ancre = get_splade_vec(d1['ancre'])
+        v_neg1 = get_splade_vec(d1['neg'])
+        v_neg2 = get_splade_vec(d2['neg'])
+        
+        # Produit scalaire (Sim SPLADE)
+        sim1 = torch.mm(v_ancre, v_neg1.t()).item()
+        sim2 = torch.mm(v_ancre, v_neg2.t()).item()
+        
+        similarities_v1.append(sim1)
+        similarities_v2.append(sim2)
+
+print(f"Score de difficulté moyen (V1) : {sum(similarities_v1)/100:.2f}")
+print(f"Score de difficulté moyen (V2) : {sum(similarities_v2)/100:.2f}")
