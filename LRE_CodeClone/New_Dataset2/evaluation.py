@@ -32,10 +32,18 @@ print(f"Nombre de types différents: {len(triplets_by_type)}\n")
 # Dans evaluation.py, modifie la fonction load_model_from_checkpoint
 def load_model_from_checkpoint(checkpoint_path, device):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)
-    # 1. Utilise ForMaskedLM au lieu de AutoModel
-    base_model = AutoModelForMaskedLM.from_pretrained(checkpoint_path)
-    model = SpladeTripletModel(base_model).to(device)
-
+    
+    # 1. Charger le modèle MLM de base (vierge)
+    # Note: On utilise le nom du modèle initial ou le chemin du checkpoint
+    base_mlm = AutoModelForMaskedLM.from_pretrained("naver/splade_v2_max") 
+    
+    # 2. Charger les adaptateurs LoRA par-dessus le modèle MLM
+    print(f"Loading LoRA weights from {checkpoint_path}...")
+    model_peft = PeftModel.from_pretrained(base_mlm, checkpoint_path)
+    
+    # 3. Maintenant, on met le tout dans la structure SPLADE
+    model = SpladeTripletModel(model_peft).to(device)
+    
     model.eval()
     return model, tokenizer
 
