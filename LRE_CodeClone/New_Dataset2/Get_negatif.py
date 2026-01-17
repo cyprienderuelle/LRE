@@ -13,7 +13,7 @@ lora_checkpoint_path = "./checkpoint_epoch_81acc_1"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 input_file = 'Resultat.jsonl'
 output_file = 'Dataset_InfoNCE_HardNeg_V2.jsonl'
-CHUNK_SIZE = 10000 
+CHUNK_SIZE = 50000 
 BATCH_SIZE = 128
 
 # 1. Chargement du Tokenizer et du modèle de base
