@@ -162,7 +162,7 @@ if __name__ == "__main__":
     base_model = AutoModelForMaskedLM.from_pretrained(checkpoint)
     model = SpladeTripletModel(base_model).to(device)
     model.base.gradient_checkpointing_enable()
-    """
+
     lora_config = LoraConfig(
         r=16,
         lora_alpha=32,
@@ -172,11 +172,9 @@ if __name__ == "__main__":
         bias="none",
         modules_to_save=["cls"] 
     )
-    """
-
-    # 2. Charger les poids LoRA de ton modèle à 81% DIRECTEMENT sur le base_model
-    print(f"Chargement des poids fine-tunés depuis {lora_checkpoint_path}...")
-    base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path, is_trainable=True)
+    
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
 
     for name, param in model.named_parameters():
         if "lora" in name or "cls" in name:
