@@ -94,7 +94,7 @@ if __name__ == "__main__":
     lambda_sparsity = 0.0008
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
-    lora_checkpoint_path = "./checkpoint_epoch_81acc_1" 
+    lora_checkpoint_path = "./checkpoint_epoch_81acc_1"
 
     def compute_validation_metrics(model, dataloader, device, k=5):
         model.eval()
@@ -176,6 +176,10 @@ if __name__ == "__main__":
     # 2. Charger les poids LoRA de ton modèle à 81% DIRECTEMENT sur le base_model
     print(f"Chargement des poids fine-tunés depuis {lora_checkpoint_path}...")
     base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path)
+
+    for name, param in model.named_parameters():
+        if "lora" in name or "cls" in name:
+            param.requires_grad = True
 
     # 3. Rendre les poids LoRA entraînables (très important !)
     base_model.train() 
