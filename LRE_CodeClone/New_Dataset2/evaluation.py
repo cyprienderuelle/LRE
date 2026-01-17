@@ -216,7 +216,7 @@ def compute_metrics_with_candidates(triplets_by_type, model, tokenizer, device, 
 # Trouver tous les checkpoints
 base_path_obj = Path(base_path)
 checkpoints = sorted([d for d in base_path_obj.iterdir()
-                     if d.is_dir() and d.name.startswith('checkpoint_epoch_1')],
+                     if d.is_dir() and d.name.startswith('checkpoint_epoch_81')],
                     key=lambda x: int(x.name.split('_')[-1]))
 
 print(f"Checkpoints trouvés: {len(checkpoints)}\n")
