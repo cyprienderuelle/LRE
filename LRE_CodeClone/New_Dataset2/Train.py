@@ -88,7 +88,7 @@ if __name__ == "__main__":
     tmp_my_triplets_list = tmp_my_triplets_list
 
     checkpoint = "naver/splade_v2_max"
-    batch_size = 512 # a augmenté
+    batch_size = 256 # a augmenté
     epochs = 1
     lr = 1e-5
     lambda_sparsity = 0.0008
