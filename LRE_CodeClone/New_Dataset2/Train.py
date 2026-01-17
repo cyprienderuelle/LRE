@@ -91,7 +91,7 @@ if __name__ == "__main__":
     batch_size = 256 # a augmenté
     epochs = 1
     lr = 1e-5
-    lambda_sparsity = 0.0008
+    lambda_sparsity = 0.001
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
     lora_checkpoint_path = "./checkpoint_epoch_81acc_1"
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     base_model = AutoModelForMaskedLM.from_pretrained(checkpoint)
     model = SpladeTripletModel(base_model).to(device)
     model.base.gradient_checkpointing_enable()
-
+    """
     lora_config = LoraConfig(
         r=16,
         lora_alpha=32,
@@ -172,10 +172,11 @@ if __name__ == "__main__":
         bias="none",
         modules_to_save=["cls"] 
     )
+    """
 
     # 2. Charger les poids LoRA de ton modèle à 81% DIRECTEMENT sur le base_model
     print(f"Chargement des poids fine-tunés depuis {lora_checkpoint_path}...")
-    base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path)
+    base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path, is_trainable=True)
 
     for name, param in model.named_parameters():
         if "lora" in name or "cls" in name:
