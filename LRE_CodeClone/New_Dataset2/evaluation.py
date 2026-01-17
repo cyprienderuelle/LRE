@@ -228,8 +228,6 @@ for checkpoint_dir in checkpoints:
     epoch_num = int(checkpoint_dir.name.split('_')[-1])
 
     model, tokenizer = load_model_from_checkpoint(str(checkpoint_dir), device)
-    print(f"Chargement du modèle fine-tuné depuis {checkpoint_dir}...")
-    model = PeftModel.from_pretrained(model, checkpoint_dir).to(device)
 
     metrics = compute_metrics_with_candidates(triplets_by_type, model, tokenizer, device, batch_size=4)
 
