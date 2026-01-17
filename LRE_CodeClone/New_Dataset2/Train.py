@@ -356,7 +356,6 @@ if __name__ == "__main__":
     model.base.save_pretrained(final_model_path)
     tokenizer.save_pretrained(final_model_path)
     torch.save({
-        'projection_layer': model.proj.state_dict(),
         'optimizer_state': optimizer.state_dict(),
         'epoch': epochs,
         'final_loss': avg_loss,
