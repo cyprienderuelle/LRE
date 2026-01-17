@@ -9,6 +9,7 @@ from tqdm import tqdm
 MODEL_ID = "naver/splade_v2_max"
 LORA_PATH = "./checkpoint_epoch_81acc_1" 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+BATCH_SIZE = 16
 
 print("🚀 Chargement du modèle...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
