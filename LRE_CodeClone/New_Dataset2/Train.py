@@ -42,14 +42,13 @@ class SpladeTripletModel(nn.Module):
         return torch.max(sparse_emb, dim=1).values
 
 class InfoNCELoss(nn.Module):
-    def __init__(self, temperature=0.07):
+    def __init__(self, temperature=0.05):
         super().__init__()
         self.temperature = temperature
         self.cross_entropy = nn.CrossEntropyLoss()
 
     def forward(self, emb_anchor, emb_pos, emb_neg=None):
         
-        # On utilise le produit scalaire (Dot Product) direct
         logits = torch.matmul(emb_anchor, emb_pos.T) / self.temperature
 
         if emb_neg is not None:
@@ -74,7 +73,7 @@ if __name__ == "__main__":
 
         return triplets
 
-    my_triplets_list = load_triplets_optimized("Dataset_InfoNCE_HardNeg_V2.jsonl")
+    my_triplets_list = load_triplets_optimized("Dataset_InfoNCE_HardNeg_V3.jsonl")
 
     tmp_my_triplets_list = []
     my_triplets_list_test = []
@@ -89,12 +88,12 @@ if __name__ == "__main__":
 
     checkpoint = "naver/splade_v2_max"
     batch_size = 256 # a augmenté
-    epochs = 1
+    epochs = 3
     lr = 1e-5
     lambda_sparsity = 0.001
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_dim = 30522
-    lora_checkpoint_path = "./checkpoint_epoch_81acc_1"
+    lora_checkpoint_path = "./checkpoint_epoch_map70"
 
     def compute_validation_metrics(model, dataloader, device, k=5):
         model.eval()
@@ -163,6 +162,7 @@ if __name__ == "__main__":
     model = SpladeTripletModel(base_model).to(device)
     model.base.gradient_checkpointing_enable()
 
+    """
     lora_config = LoraConfig(
         r=16,
         lora_alpha=32,
@@ -172,9 +172,15 @@ if __name__ == "__main__":
         bias="none",
         modules_to_save=["cls"] 
     )
-    
+
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+
+    """
+
+    # 2. Charger les poids LoRA de ton modèle à 81% DIRECTEMENT sur le base_model
+    print(f"Chargement des poids fine-tunés depuis {lora_checkpoint_path}...")
+    base_model = PeftModel.from_pretrained(base_model, lora_checkpoint_path, is_trainable=True)
 
     for name, param in model.named_parameters():
         if "lora" in name or "cls" in name:
@@ -330,7 +336,7 @@ if __name__ == "__main__":
 
         training_history.append(epoch_info)
 
-        checkpoint_dir = os.path.join(base_save_path, f"checkpoint_epoch_{epoch+1}")
+        checkpoint_dir = os.path.join(base_save_path, f"checkpoint_epoch_v2_{epoch+1}")
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         model.base.save_pretrained(checkpoint_dir)
