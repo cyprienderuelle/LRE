@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 # --- CONFIG ---
 MODEL_ID = "naver/splade_v2_max"
-LORA_PATH = "./checkpoint_epoch_81acc_1" 
+LORA_PATH = "./checkpoint_epoch_1"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
 
