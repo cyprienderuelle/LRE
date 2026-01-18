@@ -9,11 +9,11 @@ from tqdm import tqdm
 
 # --- CONFIGURATION ---
 base_model_id = "naver/splade_v2_max"
-lora_checkpoint_path = "./checkpoint_epoch_81acc_1" 
+lora_checkpoint_path = "./checkpoint_epoch_1" 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 input_file = 'Resultat.jsonl'
-output_file = 'Dataset_InfoNCE_HardNeg_V2.jsonl'
-CHUNK_SIZE = 50000 
+output_file = 'Dataset_InfoNCE_HardNeg_V3.jsonl'
+CHUNK_SIZE = 50000
 BATCH_SIZE = 128
 
 # 1. Chargement du Tokenizer et du modèle de base
