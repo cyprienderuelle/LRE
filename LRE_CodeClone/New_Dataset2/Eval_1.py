@@ -10,7 +10,7 @@ from Train import SpladeTripletModel
 
 # --- CONFIG ---
 MODEL_ID = "naver/splade_v2_max"
-LORA_PATH = "./checkpoint_epoch_81acc_1" # Ton dossier contenant adapter_model.bin
+lora_list = ["./checkpoint_epoch_V2_1", "./checkpoint_epoch_V2_2", "./checkpoint_epoch_V2_3"] # Ton dossier contenant adapter_model.bin
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
 SAMPLE_SIZE = 2000
@@ -72,13 +72,15 @@ torch.cuda.empty_cache()
 # 3. TEST MODÈLE FINE-TUNÉ
 print("\n--- TEST 2: LORA MODEL (Fine-tuné) ---")
 base_mlm_for_lora = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-# On charge l'adapteur LoRA
-model_peft = PeftModel.from_pretrained(base_mlm_for_lora, LORA_PATH)
-# On l'encapsule dans Splade
-model_lora = SpladeTripletModel(model_peft).to(DEVICE)
 
-map_lora = run_evaluation(model_lora, tokenizer, all_codes, all_labels, desc="LoRA Model")
-print(f"✅ MAP LoRA Model: {map_lora:.4f}")
+for LORA_PATH in lora_list:
+    print(f"Chargement de l'adapteur LoRA depuis {LORA_PATH}...")
+    model_peft = PeftModel.from_pretrained(base_mlm_for_lora, LORA_PATH)
+    # On l'encapsule dans Splade
+    model_lora = SpladeTripletModel(model_peft).to(DEVICE)
+
+    map_lora = run_evaluation(model_lora, tokenizer, all_codes, all_labels, desc="LoRA Model")
+    print(f"✅ MAP LoRA Model: {map_lora:.4f}")
 
 # --- RÉSUMÉ ---
 print("\n" + "="*30)
