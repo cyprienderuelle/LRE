@@ -4,85 +4,86 @@ from datasets import load_dataset
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from peft import PeftModel
 from tqdm import tqdm
+import torch.nn.functional as F
 
-from New_Dataset2.Train import SpladeTripletModel
+from Train import SpladeTripletModel
 
 # --- CONFIG ---
 MODEL_ID = "naver/splade_v2_max"
-LORA_PATH = "./checkpoint_epoch_1"
+LORA_PATH = "./checkpoint_epoch_1" # Ton dossier contenant adapter_model.bin
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
+SAMPLE_SIZE = 2000
 
-def load_base_model_only(device):
-    # On définit le nom du modèle original sur le Hub HuggingFace
-    model_id = "naver/splade_v2_max"
-    
-    print(f"Loading ORIGINAL base model (no fine-tuning): {model_id}")
-    
-    # 1. Charger le tokenizer original
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    
-    # 2. Charger le modèle MLM original (poids de base uniquement)
-    base_mlm = AutoModelForMaskedLM.from_pretrained(model_id)
-    
-    # 3. L'emballer dans ta structure SPLADE (pour avoir la méthode forward correcte)
-    model = SpladeTripletModel(base_mlm).to(device)
-    
+def run_evaluation(model, tokenizer, codes, labels, desc="Evaluation"):
     model.eval()
-    return model, tokenizer
-
-print("🚀 Chargement du modèle...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-base_model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-# model = PeftModel.from_pretrained(base_model, LORA_PATH).to(DEVICE)
-model, tokenizer = load_base_model_only(DEVICE)
-
-# LE NOUVEAU NOM 2026 (Format Parquet garanti)
-print("📦 Chargement de POJ-104 (Format Google/Parquet)...")
-dataset = load_dataset("google/code_x_glue_cc_clone_detection_poj104", split="test")
-
-# Extraction des colonnes (Vérifiées pour ce dataset)
-all_codes = dataset['code']
-all_labels = np.array(dataset['label'])
-
-# On limite à 2000 pour ne pas saturer la RAM au premier test
-sample_size = min(2000, len(all_codes))
-all_codes = all_codes[:sample_size]
-all_labels = all_labels[:sample_size]
-
-def get_embeddings(texts):
-    embeddings = []
-    for i in tqdm(range(0, len(texts), BATCH_SIZE), desc="Encodage"):
-        batch = [str(t)[:1000] for t in texts[i : i + BATCH_SIZE]]
-        inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to(DEVICE)
-        
-        with torch.no_grad():
-            # Utilise directement l'appel au modèle SPLADE
-            # Ta classe SpladeTripletModel fait déjà le calcul du vecteur sparse
-            vecs = model(inputs['input_ids'], inputs['attention_mask'])
-            embeddings.append(vecs.cpu())
+    
+    def get_embeddings(texts):
+        embeddings = []
+        for i in tqdm(range(0, len(texts), BATCH_SIZE), desc=f"Encodage {desc}"):
+            batch = [str(t)[:1000] for t in texts[i : i + BATCH_SIZE]]
+            inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to(DEVICE)
             
-    return torch.cat(embeddings)
+            with torch.no_grad():
+                # Utilise ta classe SpladeTripletModel
+                vecs = model(inputs['input_ids'], inputs['attention_mask'])
+                embeddings.append(vecs.cpu())
+        return torch.cat(embeddings)
 
-print(f"🧬 Encodage de {sample_size} programmes C...")
-all_vecs = get_embeddings(all_codes)
-
-# --- CALCUL MAP ---
-print("📊 Calcul du score...")
-sim_matrix = torch.mm(all_vecs, all_vecs.t())
-sim_matrix.fill_diagonal_(-1e9)
-
-aps = []
-for i in range(len(all_labels)):
-    target_label = all_labels[i]
-    scores = sim_matrix[i]
-    sorted_indices = torch.argsort(scores, descending=True).numpy()
+    all_vecs = get_embeddings(codes)
     
-    is_clone = (all_labels[sorted_indices] == target_label)
-    
-    if np.sum(is_clone) > 0:
-        hits = np.cumsum(is_clone)
-        prec = hits / (np.arange(len(is_clone)) + 1)
-        aps.append(np.sum(prec * is_clone) / np.sum(is_clone))
+    print(f"📊 Calcul MAP pour {desc}...")
+    sim_matrix = torch.mm(all_vecs, all_vecs.t())
+    sim_matrix.fill_diagonal_(-1e9)
 
-print(f"\n✅ SCORE FINAL MAP : {np.mean(aps):.4f}")
+    aps = []
+    for i in range(len(labels)):
+        target_label = labels[i]
+        scores = sim_matrix[i]
+        sorted_indices = torch.argsort(scores, descending=True).numpy()
+        is_clone = (labels[sorted_indices] == target_label)
+        
+        if np.sum(is_clone) > 0:
+            hits = np.cumsum(is_clone)
+            prec = hits / (np.arange(len(is_clone)) + 1)
+            aps.append(np.sum(prec * is_clone) / np.sum(is_clone))
+    
+    return np.mean(aps)
+
+# 1. Préparation des données
+print("📦 Chargement de POJ-104...")
+dataset = load_dataset("google/code_x_glue_cc_clone_detection_poj104", split="test")
+all_codes = dataset['code'][:SAMPLE_SIZE]
+all_labels = np.array(dataset['label'][:SAMPLE_SIZE])
+
+# 2. TEST BASELINE (Modèle original)
+print("\n--- TEST 1: BASELINE (Modèle original) ---")
+base_mlm = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+model_baseline = SpladeTripletModel(base_mlm).to(DEVICE)
+
+map_baseline = run_evaluation(model_baseline, tokenizer, all_codes, all_labels, desc="Baseline")
+print(f"❌ MAP Baseline: {map_baseline:.4f}")
+
+# Nettoyage mémoire
+del model_baseline, base_mlm
+torch.cuda.empty_cache()
+
+# 3. TEST MODÈLE FINE-TUNÉ
+print("\n--- TEST 2: LORA MODEL (Fine-tuné) ---")
+base_mlm_for_lora = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
+# On charge l'adapteur LoRA
+model_peft = PeftModel.from_pretrained(base_mlm_for_lora, LORA_PATH)
+# On l'encapsule dans Splade
+model_lora = SpladeTripletModel(model_peft).to(DEVICE)
+
+map_lora = run_evaluation(model_lora, tokenizer, all_codes, all_labels, desc="LoRA Model")
+print(f"✅ MAP LoRA Model: {map_lora:.4f}")
+
+# --- RÉSUMÉ ---
+print("\n" + "="*30)
+print(f"RÉSULTATS FINAUX (MAP)")
+print(f"Baseline:  {map_baseline:.4f}")
+print(f"LoRA:      {map_lora:.4f}")
+print(f"Amélioration: {((map_lora/map_baseline)-1)*100:.1f}%" if map_baseline > 0 else "N/A")
+print("="*30)
