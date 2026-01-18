@@ -47,13 +47,19 @@ def run_codesearchnet_eval(model, tokenizer, queries, codes, desc="Evaluation"):
     return np.mean(ranks)
 
 # 1. Chargement de CodeSearchNet (Exemple: Python)
-print("📦 Chargement de CodeSearchNet (C)...")
-# Note: Tu peux essayer "java", "go", "javascript", etc.
-dataset = load_dataset("code-search-net/code_search_net", "cpp", split="test", trust_remote_code=False)
+# 1. Chargement du dataset au format Parquet (méthode 2026 sécurisée)
+print("📦 Chargement de CodeSearchNet (Format Parquet propre)...")
+# On utilise le namespace 'GitHub' qui héberge les versions Parquet
+dataset = load_dataset("GitHub/code_search_net", "cpp", split="test")
 
-# On récupère les colonnes spécifiques : docstring (query) et code (target)
-all_queries = dataset['func_documentation_string'][:SAMPLE_SIZE]
+# Vérification du contenu
+print(f"Colonnes trouvées : {dataset.column_names}")
+
+# 2. Adaptation des colonnes pour ton évaluation
+# Dans la version Parquet, les colonnes s'appellent souvent :
+# 'func_code_string' pour le code et 'func_documentation_string' pour le texte
 all_codes = dataset['func_code_string'][:SAMPLE_SIZE]
+all_queries = dataset['func_documentation_string'][:SAMPLE_SIZE]
 
 # 2. TEST BASELINE
 print("\n--- TEST 1: BASELINE (Modèle original) ---")
