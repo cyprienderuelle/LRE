@@ -47,9 +47,9 @@ def run_codesearchnet_eval(model, tokenizer, queries, codes, desc="Evaluation"):
     return np.mean(ranks)
 
 # 1. Chargement de CodeSearchNet (Exemple: Python)
-print("📦 Chargement de CodeSearchNet (Python)...")
+print("📦 Chargement de CodeSearchNet (C)...")
 # Note: Tu peux essayer "java", "go", "javascript", etc.
-dataset = load_dataset("code_search_net", "python", split="test", trust_remote_code=True)
+dataset = load_dataset("code-search-net/code_search_net", "C", split="test")
 
 # On récupère les colonnes spécifiques : docstring (query) et code (target)
 all_queries = dataset['func_documentation_string'][:SAMPLE_SIZE]
