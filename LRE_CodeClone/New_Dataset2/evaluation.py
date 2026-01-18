@@ -225,7 +225,7 @@ print(f"Checkpoints trouvés: {len(checkpoints)}\n")
 results = []
 
 for checkpoint_dir in checkpoints:
-    epoch_num = int(checkpoint_dir.name.split('_')[-1])
+    epoch_num = 1
 
     model, tokenizer = load_model_from_checkpoint(str(checkpoint_dir), device)
 
