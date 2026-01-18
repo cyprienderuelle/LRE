@@ -69,11 +69,11 @@ print(f"❌ MAP Baseline: {map_baseline:.4f}")
 del model_baseline, base_mlm
 torch.cuda.empty_cache()
 
-# 3. TEST MODÈLE FINE-TUNÉ
-print("\n--- TEST 2: LORA MODEL (Fine-tuné) ---")
-base_mlm_for_lora = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-
 for LORA_PATH in lora_list:
+    # 3. TEST MODÈLE FINE-TUNÉ
+    print("\n--- TEST 2: LORA MODEL (Fine-tuné) ---")
+    base_mlm_for_lora = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
+
     print(f"Chargement de l'adapteur LoRA depuis {LORA_PATH}...")
     model_peft = PeftModel.from_pretrained(base_mlm_for_lora, LORA_PATH)
     # On l'encapsule dans Splade
