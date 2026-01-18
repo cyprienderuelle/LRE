@@ -5,17 +5,37 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 from peft import PeftModel
 from tqdm import tqdm
 
+from New_Dataset2.Train import SpladeTripletModel
+
 # --- CONFIG ---
 MODEL_ID = "naver/splade_v2_max"
 LORA_PATH = "./checkpoint_epoch_1"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
 
+def load_base_model_only(device):
+    # On définit le nom du modèle original sur le Hub HuggingFace
+    model_id = "naver/splade_v2_max"
+    
+    print(f"Loading ORIGINAL base model (no fine-tuning): {model_id}")
+    
+    # 1. Charger le tokenizer original
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    
+    # 2. Charger le modèle MLM original (poids de base uniquement)
+    base_mlm = AutoModelForMaskedLM.from_pretrained(model_id)
+    
+    # 3. L'emballer dans ta structure SPLADE (pour avoir la méthode forward correcte)
+    model = SpladeTripletModel(base_mlm).to(device)
+    
+    model.eval()
+    return model, tokenizer
+
 print("🚀 Chargement du modèle...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 base_model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
-model = PeftModel.from_pretrained(base_model, LORA_PATH).to(DEVICE)
-model.eval()
+# model = PeftModel.from_pretrained(base_model, LORA_PATH).to(DEVICE)
+model, tokenizer = load_base_model_only(DEVICE)
 
 # LE NOUVEAU NOM 2026 (Format Parquet garanti)
 print("📦 Chargement de POJ-104 (Format Google/Parquet)...")
@@ -32,15 +52,16 @@ all_labels = all_labels[:sample_size]
 
 def get_embeddings(texts):
     embeddings = []
-    batch_size = 16
-    for i in tqdm(range(0, len(texts), batch_size), desc="Encodage"):
-        batch = [str(t)[:1000] for t in texts[i : i + BATCH_SIZE]] # On tronque pour la sécurité
+    for i in tqdm(range(0, len(texts), BATCH_SIZE), desc="Encodage"):
+        batch = [str(t)[:1000] for t in texts[i : i + BATCH_SIZE]]
         inputs = tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=512).to(DEVICE)
+        
         with torch.no_grad():
-            outputs = model(**inputs)
-            # SPLADE pooling
-            vecs = torch.max(torch.log1p(torch.relu(outputs.logits)) * inputs.attention_mask.unsqueeze(-1), dim=1).values
+            # Utilise directement l'appel au modèle SPLADE
+            # Ta classe SpladeTripletModel fait déjà le calcul du vecteur sparse
+            vecs = model(inputs['input_ids'], inputs['attention_mask'])
             embeddings.append(vecs.cpu())
+            
     return torch.cat(embeddings)
 
 print(f"🧬 Encodage de {sample_size} programmes C...")
