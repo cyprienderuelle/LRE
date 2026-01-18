@@ -10,7 +10,7 @@ from Train import SpladeTripletModel
 
 # --- CONFIG ---
 MODEL_ID = "naver/splade_v2_max"
-LORA_PATH = "./checkpoint_epoch_1" # Ton dossier contenant adapter_model.bin
+LORA_PATH = "./checkpoint_epoch_81" # Ton dossier contenant adapter_model.bin
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 16
 SAMPLE_SIZE = 2000
