@@ -106,7 +106,7 @@ if __name__ == "__main__":
                 triplets.append((d["ancre"], d["pos"], d["neg"], d["type"]))
         return triplets
 
-    data_list = load_triplets("Dataset_InfoNCE_HardNeg_V3.jsonl")
+    data_list = load_triplets("Dataset_InfoNCE_HardNeg.jsonl")
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
     dataset = TripletDataset(data_list, tokenizer)
     train_size = int(0.8 * len(dataset))
