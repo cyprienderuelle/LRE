@@ -109,7 +109,7 @@ if __name__ == "__main__":
 
     # Liste des checkpoints à tester
     base_path_obj = Path(base_path)
-    checkpoints = sorted([d for d in base_path_obj.iterdir() if d.is_dir() and 'checkpoint' in d.name])
+    checkpoints = sorted([d for d in base_path_obj.iterdir() if d.is_dir() and 'checkpoint_epoch_81acc_1' in d.name])
 
     final_results = []
 
